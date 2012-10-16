@@ -1,0 +1,595 @@
+----------------------------
+-- Property and type tables
+----------------------------
+local _Property, _Type = {}, {
+	Widget = {				
+		-----------------------------
+		-- Calls the widget's method
+		-- wp: Widget property set
+		-- type: Method type
+		-- arg: Arguments to method
+		-----------------------------
+		Call = function(wp, type, ...)
+			wp:GetMethod(type)(unpack(arg));
+		end,
+		
+		--------------------------------
+		-- Clips a point to the widget
+		-- wp: Widget property set
+		-- xC, yC: Point coordinates
+		-- Returns: Clipped coordinates
+		--------------------------------
+		Clip = function(wp, xC, yC)
+			local x, y, w, h = wp:GetRect("xywh");
+			return ClampIn(xC, x, x + w), ClampIn(yC, y, y + h);
+		end,
+		
+		---------------------------------
+		-- Docks the widget in a pane
+		-- wp: Widget property set
+		-- pp: Pane property set
+		-- type: Type of dock to perform
+		-- x, y: Widget coordinates
+		-- w, h: Widget dimensions
+		---------------------------------
+		Dock = function(wp, pp, type, x, y, w, h)	
+			-- Install the widget in the pane with global coordinates and dimensions equal
+			-- to those passed in as arguments.
+			if type == "Global" then
+				local px, py, pw, ph = pp:GetRect("xywh");
+				x, y, w, h = (x - px) / pw, (y - py) / ph, w / pw, h / ph;
+			
+			-- Install the widget in the pane body.
+			elseif type == "Body" then
+				pp = pp:GetBody();
+			end
+			
+			-- Install the widget in the pane.
+			Widget.Dock(pp.N, wp.N);
+			wp:SetRect("xywh", x, y, w, h);
+		end,
+		
+		--------------------------------------------
+		-- Draws a specific picture from the widget
+		-- wp: Widget property set
+		-- picture: Picture to draw
+		-- x, y: Picture coordinates
+		-- w, h: Picture dimensions
+		--------------------------------------------
+		DrawPicture = function(wp, picture, x, y, w, h)
+			wp.pictures[picture]:Draw(x, y, w, h);
+		end,
+		
+		-------------------------------------------------------
+		-- Embeds a widget method with a filter and postmethod
+		-- wp: Widget property set
+		-- type: Method type
+		-- filter: Optional filter method to install
+		-- postmethod: Optional postmethod to install
+		-------------------------------------------------------
+		EmbedMethod = function(wp, type, filter, postmethod)
+			-- Embed the methods in a new one: set up a filter; if it passes, process the
+			-- current method and follow with a postmethod.
+			local old = wp:GetMethod(type);
+			wp:SetMethod(type, postmethod);
+			local new = wp:GetMethod(type);
+			wp:SetMethod(type, function(...)
+				if not filter or filter(unpack(arg)) then
+					old(unpack(arg));
+					new(unpack(arg));
+				end
+			end);
+		end,
+		
+		---------------------------
+		-- Frees the user widget
+		-- wp: Widget property set
+		---------------------------
+		Free = function(wp)
+			wp:Delete();
+			Widget.Destroy(wp.N);
+			_Property[wp.N] = nil;
+		end,
+		
+		-------------------------------------
+		-- Obtains the widget grid cut count
+		-- wp: Widget property set
+		-- cut: Cut type
+		-- Returns: Cut count
+		-------------------------------------
+		GetGridCuts = function(wp, cut)
+			return wp[cut] or 0;
+		end,
+		
+		---------------------------------
+		-- Gets the widget grid on state
+		-- wp: Widget property set
+		-- Returns: Grid on state
+		---------------------------------
+		GetGridOn = function(wp)
+			return wp.bGridOn == true;
+		end,
+		
+		-------------------------------------------
+		-- Gets the widget's local rectangle
+		-- wp: Widget property set
+		-- Returns: Widget coordinates, dimensions
+		-------------------------------------------
+		GetLocalRect = function(wp)
+			return wp.x, wp.y, wp.w, wp.h;
+		end,
+				
+		----------------------------
+		-- Gets the widget's method
+		-- wp: Widget property set
+		-- type: Method type
+		-- Returns: Widget method
+		----------------------------
+		GetMethod = function(wp, type)
+			return wp.methods[type] or function() end;
+		end,
+		
+		-------------------------------
+		-- Gets the widget picture set
+		-- wp: Widget property set
+		-- Returns: Widget picture set
+		-------------------------------
+		GetPictureSet = function(wp)
+			return wp.pictures;
+		end,
+		
+		-----------------------------------------------------------
+		-- Gets the widget's absolute rectangle
+		-- wp: Widget property set
+		-- format: Format string for return values
+		-- Returns: Widget coordinates, dimensions in format order
+		-----------------------------------------------------------
+		GetRect = function(wp, format)
+			local x, y, w, h = 0, 0, 1, 1;
+			repeat
+				x, y, w, h = wp.x + x * wp.w, wp.y + y * wp.h, w * wp.w, h * wp.h;
+				
+				-- Advance up the chain.
+				local parent = Widget.GetParent(wp.N);
+				if not parent then
+					break;
+				end
+				wp = W_PSet(parent);
+			until not Widget.IsLoaded(wp.N);
+			
+			-- Return the desired fields.
+			local values, choices = {}, { x = x, y = y, w = w, h = h };
+			for which in string.gfind(format, ".") do
+				table.insert(values, choices[which]);
+			end
+			return unpack(values);
+		end,
+		
+		------------------------------------------
+		-- Obtains the widget grid snap type
+		-- wp: Widget property set
+		-- bSecond: If true, use the second point
+		-- Returns: Snap type
+		------------------------------------------
+		GetSnapType = function(wp, bSecond)
+			return wp.snaptype[bSecond] or "UL";
+		end,
+		      
+		-------------------------------------
+		-- Gets the widget tag
+		-- wp: Widget property set
+		-- type: Widget type
+		-- Returns: Type-specific widget tag
+		-------------------------------------
+		GetTag = function(wp, type)
+			local tag = Widget.GetTag(wp.N);
+			local _, final = string.find(tag, type);
+			return string.sub(tag, final + 1);
+   		end,
+   		
+		-------------------------------------------
+		-- Gets the widget text set and offset
+		-- wp: Widget property set
+		-- Returns: The widget text set and offset
+		-------------------------------------------
+		GetText = function(wp)
+			return GetAsset("Text", wp.textSet), wp.textOffset or 0;
+		end,
+		
+		--------------------------------------------------------------------
+		-- Gets the widget's visible absolute rectangle
+		-- wp: Widget property set
+		-- Returns: Visiblity boolean; view coordinates, dimensions if true
+		--------------------------------------------------------------------
+		GetViewRect = function(wp)
+			local x, y, w, h = 0, 0, 1, 1;
+			repeat
+				-- If this is not the top of the chain, translate with respect to the parent.
+				local parent = Widget.GetParent(wp.N);
+				if parent then
+					local vx, vy = W_PSet(parent):GetView();
+					x, y = x - vx, y - vy;
+				end
+
+				-- Get the local widget dimensions.
+				local lx, ly, lw, lh = wp:GetLocalRect();
+
+				-- Map the region into the widget frame; quit if it goes out of view.
+				x, y = lx + x * lw, ly + y * lh;
+				local ex, ey = x + w * lw, y + h * lh;
+				if x > 1 or ex < 0 or y > 1 or ey < 0 then
+					return false;
+				end
+		
+				-- Clamp the region as necessary. Compute the new region.
+				x, y = math.max(x, 0), math.max(y, 0);
+				w, h = math.min(ex, 1) - x, math.min(ey, 1) - y;
+			
+				-- Advance up the chain.
+				if not parent then
+					break;
+				end
+				wp = W_PSet(parent);
+			until not Widget.IsLoaded(wp.N);
+			return true, x, y, w, h;
+		end,
+		
+		---------------------------------------------
+		-- Indicates whether the widget is the focus
+		-- wp: Widget property set
+		-- Returns: If true, it is the focus
+		---------------------------------------------
+		IsFocus = function(wp)
+			return CurrentSection:GetFocus() == wp;
+		end,
+			
+		---------------------------------------------
+		-- Loads the widget picture set
+		-- wp: Widget property set
+		-- data: Data from which pictures are loaded
+		-- arg: Pictures to load
+		---------------------------------------------
+		LoadPictures = function(wp, data, ...)
+			for _, picture in ipairs(arg) do
+				wp.pictures[picture] = data[picture];
+			end
+		end,
+		
+		------------------------------------------------
+		-- Prints the widget picture set
+		-- wp: Widget property set
+		-- stream: Stream to which pictures are printed
+		-- indent: Indent string
+		-- arg: Pictures to print
+		------------------------------------------------
+		PrintPictures = function(wp, stream, indent, ...)
+			for index, picture in ipairs(arg) do
+				stream:write(indent, "\t", picture, " = ");
+				wp.pictures[picture]:Print(stream, indent .. "\t");
+				stream:write(index < table.getn(arg) and ",", "\n");
+			end		
+		end,
+		
+		------------------------------------------------
+		-- Prints the widget data
+		-- wp: Widget property set
+		-- stream: Stream to which pictures are printed
+		-- indent: Indent string
+		-- type: Widget type
+		-- body: Type-specific body printout		
+		------------------------------------------------
+		PrintWidget = function(wp, stream, indent, type, body)
+      		local indent, pane = indent or "", Widget.GetPane(wp.N);
+      		local parent = pane == Section("Home").User.N and "" or Widget.GetTag(pane);
+   			stream:write(string.format("W_Load(%q, %q, %q, {\n", type, wp:GetTag(type), parent));
+   			body();
+   			stream:write(indent, string.format("}, %f, %f, %f, %f);\n", wp:GetLocalRect()));
+		end,
+		
+		-----------------------------------
+		-- Invokes the widget event method
+		-- wp: Widget property set
+		-- event: Event to process
+		-----------------------------------
+		ProcessEvent = function(wp, event)
+			AddTask(function()
+				wp:Call("e", event);
+			end);
+		end,
+		
+		-------------------------------------------------
+		-- Performs an action embedded between refreshes
+		-- wp: Widget property set
+		-- action: Action to perform
+		-------------------------------------------------
+		RefreshAction = function(wp, action)
+			wp:Call("onRefresh", false);
+			action();
+			wp:Call("onRefresh", true);
+		end,
+		
+		-------------------------------------
+		-- Assigns the widget grid cut count
+		-- wp: Widget property set
+		-- cut: Cut type
+		-- count: Count to assign
+		-------------------------------------
+		SetGridCuts = function(wp, cut, count)
+			wp[cut] = count;
+		end,
+
+		-----------------------------------
+		-- Sets the widget grid on state
+		-- wp: Widget property set
+		-- bGridOn: Grid on state to apply
+		-----------------------------------
+		SetGridOn = function(wp, bGridOn)
+			wp.bGridOn = bGridOn;
+		end,
+		
+		----------------------------
+		-- Sets the widget's method
+		-- wp: Widget property set
+		-- type: Method type
+		-- method: Method to assign
+		----------------------------
+		SetMethod = function(wp, type, method)
+			wp.methods[type] = method;
+		end,
+
+		-----------------------------------------
+		-- Sets a specific picture in the widget
+		-- wp: Widget property set
+		-- picture: Picture to set
+		-- data: Picture data
+		-----------------------------------------
+		SetPicture = function(wp, picture, data)
+			wp.pictures[picture] = data;
+		end,
+		
+		------------------------------------------------
+		-- Sets the widget's local rectangle
+		-- wp: Widget property set
+		-- format: Format string used to assign fields
+		-- arg: Coordinates, dimensions in format order
+		------------------------------------------------
+		SetRect = function(wp, format, ...)
+			local index = 1;
+			for which in string.gfind(format, ".") do
+				wp[which] = arg[index];
+				index = index + 1;
+			end
+		end,
+		
+		------------------------------------------
+		-- Assigns the widget grid snap type
+		-- wp: Widget property set
+		-- snap: Snap type
+		-- bSecond: If true, use the second point
+		------------------------------------------
+		SetSnapType = function(wp, snap, bSecond)
+			wp.snaptype[bSecond] = snap;
+		end,
+		
+		----------------------------
+		-- Sets the widget string
+		-- wp: Widget property set
+		-- string: String to assign
+		----------------------------
+		SetString = function(wp, string)
+			wp.string = string;
+		end,
+		
+		---------------------------------------
+		-- Sets the widget text set and offset
+		-- wp: Widget property set
+		-- textset: Text set to assign
+		-- offset: Offset of text
+		---------------------------------------
+		SetText = function(wp, textset, offset)
+			wp.textSet, wp.textOffset = textset, offset;
+		end,
+		
+		------------------------------------
+		-- Invokes the widget signal method
+		-- wp: Widget property set
+		-- x, y: Widget coordinates
+		-- w, h: Widget dimensions
+		------------------------------------
+		SignalTest = function(wp, x, y, w, h)
+			local cx, cy, bValid, vx, vy, vw, vh = cx, cy, wp:GetViewRect();
+			if bValid and PointInBox(cx, cy, vx, vy, vw, vh) then
+				wp:Call("s", cx, cy, x, y, w, h);
+			end
+		end,
+		
+		------------------------------------------
+		-- Snaps a point to the widget grid
+		-- wp: Widget property set
+		-- px, py: Point coordinates
+		-- bSecond: If true, use the second point
+		-- Returns: Snapped coordinates
+		------------------------------------------
+		Snap = function(wp, px, py, bSecond)
+			-- If the grid is not activated, trivially return the input points.
+			if not wp:GetGridOn() then
+				return px, py;
+			end
+			
+			-- Divide the grid up according to its horizontal and vertical partition count.
+			-- Compute which column and row the point lies within.
+			local x, y, w, h = wp:GetRect("xywh");
+			w, h = w / (wp:GetGridCuts("xCuts") + 1), h / (wp:GetGridCuts("yCuts") + 1);
+			local column, row = math.floor((px - x) / w), math.floor((py - y) / h);
+			
+			-- Get the snap type for the requested point, and return the edges of the proper
+			-- column/row pair.
+			local type = wp:GetSnapType(bSecond);
+			if type == "UR" then
+				column = column + 1;
+			elseif type == "LL" then
+				row = row + 1;
+			elseif type == "LR" then
+				column, row = column + 1, row + 1;
+			end
+			return x + column * w, y + row * h;
+		end,
+		
+		-----------------------------------------
+		-- Builds a basic box signal test method
+		-- wp: Widget property set
+		-- Returns: Signal test method
+		-----------------------------------------
+		ST_Basic = function(wp)
+			return function(cx, cy, x, y, w, h)
+				if PointInBox(cx, cy, x, y, w, h) then
+					Widget.Signal(wp.N);
+				end
+			end
+		end,
+				
+		------------------------------------
+		-- Invokes the widget update method
+		-- wp: Widget property set
+		-- x, y: Widget coordinates
+		-- w, h: Widget dimensions
+		------------------------------------
+		Update = function(wp, x, y, w, h)
+			local bValid, vx, vy, vw, vh = wp:GetViewRect();
+			if bValid then
+				Render.SetBounds(vx, vy, vw, vh);
+				wp:Call("u", x, y, w, h);
+			end
+		end,
+
+		------------------------------------------------
+		-- Draws the widget string, centered vertically
+		-- wp: Widget property set
+		-- x, y: Widget coordinates
+		-- w, h: Widget dimensions
+		------------------------------------------------
+		VertCString = function(wp, x, y, w, h)
+			local textset, offset = wp:GetText();
+			local _, ch = textset:GetSize(wp.string);
+			local _, vh = Render.GetVideoSize();
+			textset:DrawString(wp.string, x + offset * w, y + .5 * (h - ch / vh));
+		end,
+
+		_Type = "Composite"
+	}
+};
+
+-----------------------------
+-- W_Inherit
+-- Inherits a widget type
+-- component: Component type
+-- table: Component table
+-- base: Base type
+-----------------------------
+function W_Inherit (component, table, base)
+	_Type[component] = table;
+	setmetatable(table, { __index = W_Type(base) });
+end
+
+-----------------------------
+-- W_Load
+-- Loads a component
+-- component: Component type
+-- tag: Component tag
+-- parent: Parent tag
+-- data: Loading data
+-- x, y: Loading coordinates
+-- w, h: Loading dimensions
+-----------------------------
+function W_Load (component, tag, parent, data, x, y, w, h)
+	-- Add a new widget to the component's list.
+	local wp = W_Type(component).UserNew(data);
+	Widget.SetTag(wp.N, component .. tag);
+	W_Type(component).WidgetList:Append(function()
+		return Widget.GetTag(wp.N);
+	end, wp);
+	
+	-- Cache some information for binding the widget.
+	LoadCache[component .. tag] = { parent = parent, x = x, y = y, w = w, h = h };
+end
+
+--------------------------------
+-- W_New
+-- Builds a new component
+-- component: Component type
+-- arg: Arguments to builder 
+-- Returns: Widget property set
+--------------------------------
+function W_New (component, ...)
+	local wp = W_Prime(component);
+		wp:New(unpack(arg));
+	return wp;
+end
+
+--------------------------------
+-- W_Prime
+-- Creates and primes a widget
+-- component: Component type
+-- Returns: Widget property set
+--------------------------------
+function W_Prime (component)
+	-- Instantiate a widget of the given type and store its name in a property set.
+	local type = W_Type(component);
+	local Type = type._Type;
+	local widget = UI.CreateWidget(Widget[Type]);
+	local wp = {
+		N = widget,
+		methods = {}, pictures = {}, snaptype = {}
+	};
+	
+	-- Assign the component methods to the widget. This will first check the component,
+	-- then iterate through base types until a field is found.
+	setmetatable(wp, { __index = type });
+	
+	-- Bind the widget back to the property set.
+	_Property[wp.N] = wp;
+	return wp;
+end
+
+-----------------------------------
+-- W_PSet
+-- Obtains a widget's property set
+-- widget: Widget reference
+-- Returns: Property set
+-----------------------------------
+function W_PSet (widget)
+	return _Property[widget];
+end
+
+------------------------------------
+-- W_Type
+-- Obtains a widget component table
+-- component: Component type
+-- Returns: Component table
+------------------------------------
+function W_Type (component)
+	return _Type[component];
+end
+
+-- Install the metatables.
+setmetatable(Part, { __index = Signalee });
+setmetatable(Widget, { __index = Signalee });
+setmetatable(Composite, { __index = Widget });
+setmetatable(Range, { __index = Widget });
+
+-- Load the widget types.
+return Load{
+	---------------------------
+	-- Composite-derived types
+	---------------------------
+	"Panes.txt",	
+	"Checkbox.txt",
+	"PushButton.txt",
+	"SliderHorz.txt",
+	"StaticText.txt",
+	
+	--------------------------
+	-- Sequence-derived types
+	--------------------------
+	"Ranges.txt"
+};

@@ -1,0 +1,28 @@
+----------------------------------
+-- Backdrop
+-- Backdrop setup procedure
+-- bBlock: Blocking boolean
+-- Returns: Backdrop property set
+----------------------------------
+function Backdrop (bBlock)
+	return W_New("Backdrop", bBlock);
+end
+
+---------------------------------------------------
+-- Table with backdrop methods; inherits from pane
+---------------------------------------------------
+W_Inherit("Backdrop", {
+	----------------------------
+	-- Generates a new backdrop
+	-- wp: Widget property set
+	-- bBlock: Blocking boolean
+	----------------------------
+	New = function(wp, bBlock)
+		-- Signal --
+		wp:SetMethod("s", function(cx, cy, x, y, w, h)
+			if bBlock then
+				Widget.Signal(wp.N);
+			end
+		end);
+	end
+}, "Pane");

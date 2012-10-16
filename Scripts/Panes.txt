@@ -1,0 +1,91 @@
+-------------------------------------------------
+-- Table with pane methods; inherits from widget
+-------------------------------------------------
+W_Inherit("Pane", {
+	-------------------------------------------------------------------------------------
+	-- Sets up the pane so that it becomes top-level on grabs of it or its child widgets
+	-- wp: Widget property set
+	-------------------------------------------------------------------------------------
+	Bubble = function(wp)
+		-- Post Event --
+		local function pe (event)
+			if event == Widget.WidgetGrab or event == Widget.RangeGrabItem or event == Widget.CompositeGrabPart then
+				Widget.PromoteToDockHead(wp.N);
+				for pane in wp:SnapChain() do
+					Widget.PromoteToDockHead(pane.N);
+				end
+			end
+		end;
+		
+		-- Embed routine --
+		local function embed (wp)
+			for paneitem in wp:Iter() do
+				local child = W_PSet(paneitem);
+				child:EmbedMethod("e", nil, pe);
+				
+				-- Recursely embed the method into child panes.
+				if Widget.GetType(paneitem) == Widget.Composite and child.Iter then
+					embed(child);
+				end
+			end
+		end
+				
+		-- Embed the method in this pane and all members of its snap chain.
+		wp:EmbedMethod("e", nil, pe);
+		embed(wp);
+		for pane in wp:SnapChain() do
+			pane:EmbedMethod("e", nil, pe);
+			embed(pane);
+		end
+	end,
+	
+	---------------------------------
+	-- Loads the pane into the frame
+	-- wp: Widget property set
+	-- x, y: Pane coordinates
+	-- w, h: Pane dimensions
+	---------------------------------
+	Frame = function(wp, x, y, w, h)
+		Widget.AddToFrame(wp.N);
+		Widget.PromoteToFrameHead(wp.N);
+		wp:SetRect("xywh", x, y, w, h);
+	end,
+		
+	-----------------------------
+	-- Gets a pane's view
+	-- wp: Widget property set
+	-- Returns: View coordinates
+	-----------------------------
+	GetView = function(wp)
+		return wp.vx or 0, wp.vy or 0;
+	end,
+	
+	----------------------------------------
+	-- Builds an iterator over the pane
+	-- wp: Widget property set
+	-- Returns: Iterator which returns name
+	----------------------------------------
+	Iter = function(wp)
+		return function(_, widget)
+			if widget == true then
+				return Widget.GetDockHead(wp.N);
+			end
+			return Widget.GetNextDockLink(widget);
+		end, nil, true;
+	end,
+
+	---------------------------
+	-- Sets a pane's view
+	-- wp: Widget property set
+	-- x, y: View coordinates
+	---------------------------
+	SetView = function(wp, x, y)
+		wp.vx, wp.vy = x, y;
+	end
+}, "Widget");
+
+-- Load the pane types.
+return Load{
+	"Backdrop.txt",
+	"Popup.txt"
+};

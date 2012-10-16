@@ -1,0 +1,302 @@
+----------------------------------
+-- Combobox
+-- Combobox setup procedure
+-- capacity: Combobox capacity
+-- Returns: Combobox property set
+----------------------------------
+function Combobox (capacity)
+	local wp = W_New("Combobox", capacity);
+		wp:SetPicture("H", GetAsset("Picture", "blue"));
+		wp:SetPicture("B", GetAsset("Picture", "gray"));
+		wp:SetPicture("S", GetAsset("Picture", "purple"));
+		wp:SetText("T18", .05);
+	return wp;
+end
+
+-------------------------------------------------------
+-- Table with combobox methods; inherits from textlist
+-------------------------------------------------------
+W_Inherit("Combobox", {
+	-----------------------------
+	-- Deletes the user combobox
+	-- wp: Widget property set
+	-----------------------------
+	Delete = function(wp)
+	
+	end,
+
+	---------------------------------
+	-- Loads the combobox dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	----------------------------------
+	Dialog = function(dp, widgets)
+		----------------------------
+		-- Loading: combobox dialog
+		----------------------------
+		dp:SetString("Combobox Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Heading", "H");
+		widgets.pics:Append("Backdrop", "B");
+		widgets.pics:Append("Selection", "S");
+				
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+		
+	-------------------------------
+	-- Generates a new combobox
+	-- wp: Widget property set
+	-- capacity: Combobox capacity
+	-------------------------------
+	New = function(wp, capacity)
+		wp.array, wp.offset, wp.capacity = { free = {} }, Range.CreateSpot(wp.N, false, true), capacity;
+		Spot.Set(wp.offset, 0);
+		
+		-- Event --
+		wp:SetMethod("e", function(event)
+			if event == Widget.WidgetGrab then
+				wp:SetOpen(not wp:GetOpen());
+			elseif event == Widget.RangeGrabItem then
+				wp.enter = Range.GetGrabbedItem(wp.N);
+			elseif event == Widget.RangeDropItem then
+				if wp.enter then
+					if wp.heading ~= wp.enter then
+						wp:RefreshAction(function()
+							wp.heading = wp.enter;
+						end);
+					end
+					wp:SetOpen(false);
+				end
+			end
+		end);
+		
+		-- Signal --
+		wp:SetMethod("s", function(cx, cy, x, y, w, h)
+			-- Compute the open height. If there are too few items to fill the capacity,
+			-- reduce the open height.
+			local itemcount, oh = Range.GetItemCount(wp.N), h * (wp.capacity + 1);
+			if wp.capacity > itemcount then
+				oh = oh - (wp.capacity - itemcount) * h;
+			end
+
+			-- Signal a hit if the cursor lies in the combobox body. Signal an item if 
+			-- the cursor falls within it while the combobox is open.
+			local bOpen = wp:GetOpen();
+			if PointInBox(cx, cy, x, y, w, bOpen and oh or h) then
+				Widget.Signal(wp.N);
+				if bOpen and cy >= y + h then
+					local offset, index = Spot.Get(wp.offset), math.floor((cy - y - h) / h);
+					Range.SignalItem(wp.N, offset + index);
+				end
+			end
+		end);		
+		
+		-- Update --	
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:DrawPicture("H", x, y, w, h);
+	
+			-- If the combobox is not empty, draw the heading text.
+			local itemcount = Range.GetItemCount(wp.N);
+			if itemcount ~= 0 then
+				local str, textset, offset = wp:GetHeading().text, wp:GetText();
+				textset:DrawString(str, x + offset * w, y);
+				
+				-- If the box is open, go down one row and draw the backdrop.
+				if wp:GetOpen() then
+					local y = y + h;
+					wp:DrawPicture("B", x, y, w, math.min(wp.capacity, itemcount) * h);
+
+					-- Iterate through the visible items. If an item is entered, highlight
+					-- it. Draw any string attached to the item and go to the next line.
+					local entered = Range.GetEnteredItem(wp.N);
+					for index, entry in wp:View() do
+						if index == entered then
+							wp:DrawPicture("S", x, y, w, h, vx, vy, vw, vh);
+						end
+						textset:DrawString(entry.text, x + offset * w, y);
+						y = y + h;
+					end
+				end
+			end
+
+			-- Frame the combobox.
+			Render.DrawBox(x, y, w, h, 1, 1, 1);
+		end);
+		
+		-- Bind --
+		wp:SetMethod("onBind", function(sp, bUp)
+			wp[bUp and "sU" or "sD"] = sp;
+			
+			-- Put the scroll button into a matching state with the combobox.
+			Widget.AllowSignalTest(sp.N, wp:GetOpen());
+			Widget.AllowUpdate(sp.N, wp:GetOpen());		
+		end);
+		
+		-- Unbind --
+		wp:SetMethod("onUnbind", function(bUp)
+			wp[bUp and "sU" or "sD"] = nil;		
+		end);	
+	end,
+	
+	-----------------------------------------------
+	-- Prints the combobox data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which combobox is printed
+	-- indent: Indent string
+	-----------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("Combobox", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+	
+	----------------------------------
+	-- Generates a new user combobox
+	-- Returns: Combobox property set
+	----------------------------------
+	UserNew = function()
+		return UserW_Widget("Combobox", 0);
+	end,
+
+	--------------------------------------------
+	-- Adds an entry to the end of the combobox
+	-- wp: Widget property set
+	-- text: Text to assign
+	-- datum: Datum to attach to entry
+	--------------------------------------------
+	Append = function(wp, text, datum)
+		local itemcount = Range.GetItemCount(wp.N);
+		wp:AddEntry(itemcount, text, datum);
+		
+		-- If this is the first entry, invoke a refresh.
+		if itemcount == 0 then
+			wp:Call("onRefresh", true);
+		end
+	end,
+
+	-----------------------------------
+	-- Gets the combobox heading entry
+	-- wp: Widget property set
+	-- Returns: Heading entry
+	-----------------------------------
+	GetHeading = function(wp)
+		return wp:GetEntry(wp:Heading());
+	end,
+	
+	---------------------------------------------
+	-- Gets the combobox's local rectangle
+	-- wp: Widget property set
+	-- Returns: Combobox coordinates, dimensions
+	---------------------------------------------
+	GetLocalRect = function(wp)
+		return wp.x, wp.y, wp.w, wp.h + (wp:GetOpen() and wp.capacity * wp.h or 0);
+	end,
+		
+	--------------------------------
+	-- Gets the combobox open state
+	-- wp: Widget property set
+	-- Returns: Open state
+	--------------------------------
+	GetOpen = function(wp)
+		return wp.bOpen == true;
+	end,	
+	
+	-----------------------
+	-- Gets the combobox heading
+	-- wp: Widget property set
+	-- Returns: Heading
+	------------------------------
+	Heading = function(wp)
+		return wp.heading or 0;
+	end,
+	
+	------------------------------------------------
+	-- Builds an iterator over the scroll set
+	-- wp: Widget property set
+	-- bThis: If true, include the combobox
+	-- Returns: Iterator which returns property set
+	------------------------------------------------
+	ScrollSet = function(wp, bThis)
+		return coroutine.wrap(function()
+			if bThis then
+				coroutine.yield(wp);
+			end
+			for _, component in ipairs{ "sU", "sD" } do
+				if wp[component] then
+					coroutine.yield(wp[component]);
+				end
+			end
+		end);
+	end,
+		
+	--------------------------------
+	-- Sets the combobox open state
+	-- wp: Widget property set
+	-- bOpen: Open state to apply
+	--------------------------------
+	SetOpen = function(wp, bOpen)
+		if bOpen then
+			-- Prioritize combobox draws and hit tests by promoting both the combobox and
+			-- its scroll set, in that order, to the head.
+			for component in wp:ScrollSet(true) do
+				Widget.PromoteToDockHead(component.N);
+			end
+			
+			-- Place the offset at the heading.
+			Spot.Set(wp.offset, wp:Heading());
+			
+			-- Load a net to trap outside presses.
+			wp.net = Backdrop(false);
+			wp.net:Frame(0, 0, 1, 1);
+				
+			-- Signal --
+			wp.net:SetMethod("s", function(cx, cy, x, y, w, h)
+				-- Determine if the combobox or its scroll set are signaled or grabbed.
+				local bSignaled, bGrabbed = false, Range.GetGrabbedItem(wp.N);
+				for component in wp:ScrollSet(true) do
+					component:SignalTest(component:GetRect("xywh"));
+					bSignaled, bGrabbed = bSignaled or Widget.IsSignaled(component.N), bGrabbed or Widget.IsGrabbed(component.N);
+				end
+				
+				-- Close the combobox on an outside press.
+				if UI.GetPress() and not (bSignaled or bGrabbed) then
+					AddTask(function()
+						wp:SetOpen(false);
+					end);
+				end
+				UI.Unsignal();
+			end);
+		else
+			-- Remove the net on closes.
+			local net = wp.net;
+			if net then
+				AddTask(function()
+					Widget.Destroy(net.N);
+				end);
+				wp.net = nil;
+			end
+		end
+		wp.bOpen = bOpen;
+		
+		-- Enable or disable the scroll set as necessary.
+		for component in wp:ScrollSet(false) do
+			Widget.AllowSignalTest(component.N, bOpen);
+			Widget.AllowUpdate(component.N, bOpen);
+		end
+	end
+}, "Textlist");

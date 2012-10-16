@@ -1,0 +1,93 @@
+-- Install the load dialog.
+LoadDialog("Load",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("Load", .125, false);
+		s.FileList = ListboxBasic(3);
+			
+		-----------
+		-- Docking
+		-----------
+		local col = SpacedColumn(.05, .05, .1, .7, .1);
+			HelpText("Load", "List_Load", true, "T18", .05):Dock(s.Pane, "Body", col());
+   		s.FileList:Dock(s.Pane, "Body", col(.4));
+		local col = SpacedColumn(.3, .8, .25, .1, .1);
+			ScrollButton(s.FileList, true, 300):Dock(s.Pane, "Body", col());
+			ScrollButton(s.FileList, false, 300):Dock(s.Pane, "Body", col());
+		local row = SpacedRow(.05, .05, .8, .2, .175);
+   		PushButton("Load", function()
+   			local file = s.FileList:GetSelection();
+   			if not file then
+   				Message("No scenes available to load.");
+   			else
+   				ConditionQuery("Some changes are unsaved. Load a new scene anyway?",
+   				function()
+					return Save;
+				end,
+				function()
+    				local scene, error = loadfile("Scenes/" .. file.text);
+   					if scene then
+   						ClearScene();
+   						
+   						-- Load widgets into the scene.
+   						LoadCache = {};
+   						scene();
+   						
+   						-- Dock the widgets in their proper positions.
+   						for tag, data in pairs(LoadCache) do
+   						   local parent = data.parent ~= "" and UI.FindWidget(data.parent) or Section("Home").User.N;
+                        Widget.Dock(parent, UI.FindWidget(tag), data.x, data.y, data.w, data.h);
+   						end
+   						LoadCache = nil;
+   					
+   						-- Update the scene to reflect the loaded widgets.
+   						Section("Home").Type:Call("onRefresh", true);
+   
+   						-- Indicate that there are no unsaved changes and set the save filename.
+   						Save, SaveName = false, file.text;
+   						
+         				-- Alert the user that the load occurred.
+         				Message(file.text .. " loaded.");
+   					else
+   						Printf(error);
+   					end
+   				end);
+   			end
+   		end):Dock(s.Pane, "Body", row(.15));
+   		OK(s):Dock(s.Pane, "Body", row());	
+	end,
+	
+	-- Entry
+	---------
+	function(s)
+		s.Pane:Frame(0, 0, .4, .525);
+		
+		-- Load the scene file list.
+		s.FileList:Fill(
+			-- Supply --
+			function()
+				return coroutine.wrap(function()
+					-- Scan the scenes folder, yielding each file with a scene extension.
+					local index = 0;
+					for file in ScanFolder("Scenes") do
+						if string.find(file, ".sce", -4) then
+						   coroutine.yield(index, file);
+						   index = index + 1;
+						end
+					end
+				end);
+			end,
+			
+			-- Choice Test --
+			function(text, datum)	
+			end
+		);		
+	end,
+	
+	-- Close --
+	function(s, bCancel)
+	end
+);

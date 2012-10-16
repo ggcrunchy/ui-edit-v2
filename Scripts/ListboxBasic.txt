@@ -1,0 +1,254 @@
+---------------------------------------
+-- ListboxBasic
+-- Basic listbox setup procedure
+-- capacity: Listbox capacity
+-- Returns: Basic listbox property set
+---------------------------------------
+function ListboxBasic (capacity)
+	local wp = W_New("ListboxBasic", capacity);
+		wp:SetPicture("B", GetAsset("Picture", "black"));
+		wp:SetPicture("S", GetAsset("Picture", "blue"));
+		wp:SetText("T18", .05);
+	return wp;
+end
+
+------------------------------------------------------------
+-- Table with basic listbox methods; inherits from textlist
+------------------------------------------------------------
+W_Inherit("ListboxBasic", {
+	----------------------------------
+	-- Deletes the user basic listbox
+	-- wp: Widget property set
+	----------------------------------
+	Delete = function(wp)
+	
+	end,	
+
+	--------------------------------------
+	-- Loads the basic listbox dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	--------------------------------------
+	Dialog = function(dp, widgets)
+		---------------------------------
+		-- Loading: basic listbox dialog
+		---------------------------------
+		dp:SetString("Basic Listbox Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Backdrop", "B");
+		widgets.pics:Append("Selection", "S");
+		
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+
+	---------------------------------
+	-- Generates a new basic listbox
+	-- wp: Widget property set
+	-- capacity: Listbox capacity
+	---------------------------------
+	New = function(wp, capacity)
+		wp.array, wp.offset, wp.capacity = { free = {} }, Range.CreateSpot(wp.N, false, true), capacity;
+
+		-- Event --
+		wp:SetMethod("e", function(event)
+			if event == Widget.RangeGrabItem then
+				wp:Select(Range.GetGrabbedItem(wp.N));
+			end
+		end);
+		
+		-- Signal --
+		wp:SetMethod("s", function(cx, cy, x, y, w, h)
+			-- If the cursor hits the listbox, see if it has hit an item. Since each
+			-- item is as wide as the listbox and there is no separation between items,
+			-- its relative offset is found by evenly dividing the listbox into a
+			-- number of vertical sections equal to the listbox's capacity, and fitting
+			-- the cursor into one of those sections. This offset, when added to the
+			-- listbox's offset, indicates which item the cursor is over; if it lies
+			-- within the listbox's range, the item has been hit.
+			if PointInBox(cx, cy, x, y, w, h) then
+				Widget.Signal(wp.N);
+				local offset, index = Spot.Get(wp.offset), math.floor((cy - y) * wp.capacity / h);
+				if offset + index < Range.GetItemCount(wp.N) then
+					Range.SignalItem(wp.N, offset + index);
+				end
+			end
+		end);
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:DrawPicture("B", x, y, w, h);
+			
+			-- Iterate through the visible items. If an item is selected, highlight it.
+			-- Draw the string attached to the item, then move on to the next line.
+			local y2, dh, textset, offset = y, h / wp.capacity, wp:GetText();
+			for index, entry in wp:View() do
+				if index == wp.selection then
+					wp:DrawPicture("S", x, y2, w, dh);
+				end
+				textset:DrawString(entry.text, x + offset * w, y2);
+				y2 = y2 + dh;
+			end
+			
+			-- Frame the listbox.
+			Render.DrawBox(x, y, w, h, 1, 1, 1);
+		end);
+	end,
+
+	----------------------------------------------------
+	-- Prints the basic listbox data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which basic listbox is printed
+	-- indent: Indent string
+	----------------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("ListboxBasic", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+	
+	---------------------------------------
+	-- Generates a new user basic listbox
+	-- Returns: Basic listbox property set
+	---------------------------------------
+	UserNew = function()
+		return UserW_Widget("ListboxBasic", 0);
+	end,
+	
+	--------------------------------------
+	-- Adds an entry to the basic listbox
+	-- wp: Widget property set
+	-- entry: Index of entry
+	-- text: Text to assign
+	-- datum: Datum to attach to entry
+	--------------------------------------
+	Add = function(wp, entry, text, datum)
+		wp:AddEntry(entry, text, datum);
+		
+		-- Make a selection if there is none.
+		if not wp.selection then
+			wp:Select(entry, false);
+			
+		-- Move the selection ahead if necessary.
+		elseif entry <= wp.selection then
+			wp:Select(wp.selection + 1, true);
+		end
+	end,
+	
+	-------------------------------------------------
+	-- Adds an entry to the end of the basic listbox
+	-- wp: Widget property set
+	-- text: Text to assign
+	-- datum: Datum to attach to entry
+	-------------------------------------------------
+	Append = function(wp, text, datum)
+		wp:Add(Range.GetItemCount(wp.N), text, datum);
+	end,
+	
+	----------------------------
+	-- Clears the basic listbox
+	-- wp: Widget property set
+	----------------------------
+	Clear = function(wp)
+		wp.array, wp.selection = { free = {} }, nil;
+		Range.DeleteItems(wp.N, 0, Range.GetItemCount(wp.N));
+	end,
+	
+	---------------------------
+	-- Fills the basic listbox
+	-- wp: Widget property set
+	-- supply: Supply iterator
+	-- test: Choice test routine
+	---------------------------
+	Fill = function(wp, supply, test)
+		wp:Clear();
+		
+		-- Load all supplied entries. Determine which, if any, is the selection.
+		local choice = 0;
+		for index, text, datum in supply() do
+			wp:AddEntry(index, text, datum);
+			if test(text, datum) then
+				choice = index;
+			end
+		end
+	
+		-- Assign the selection.
+		wp:Select(choice, false);
+	end,
+	
+	------------------------------------------------
+	-- Gets the basic listbox selection entry
+	-- wp: Widget property set
+	-- Returns: The text and datum in the selection
+	------------------------------------------------
+	GetSelection = function(wp)
+		if wp.selection then
+			return wp:GetEntry(wp.selection);
+		end
+	end,
+	
+	-------------------------------------------
+	-- Removes an entry from the basic listbox
+	-- wp: Widget property set
+	-- entry: Entry to remove
+	-------------------------------------------
+	Remove = function(wp, entry)
+		-- Move the selection back if removing before it, flagging an automatic switch.
+		local selection, bAuto = wp.selection, false;
+		if entry < selection then
+			selection, bAuto = selection - 1, true;
+			
+		-- If the last entry is removed and it was the selection, move the selection back;
+		-- this may empty the listbox, in which case there is no longer a valid selection.
+		-- If removed elsewhere, nullify the selection so the listbox properly refreshes.
+		elseif entry == selection then
+			if selection + 1 == Range.GetItemCount(wp.N) then
+				selection = selection > 0 and selection - 1 or nil;
+			else
+				wp.selection = nil;	
+			end
+		end
+		wp:RemoveEntry(entry);
+		
+		-- Make a new selection, using the updated index and auto flag.
+		wp:Select(selection, bAuto);
+	end,
+
+	----------------------------------------
+	-- Selects an item in the basic listbox
+	-- wp: Widget property set
+	-- item: Item to select
+	-- bAuto: Auto boolean
+	----------------------------------------
+	Select = function(wp, item, bAuto)
+		-- If the selection is not automatic and it changed, refresh the listbox.
+		if not bAuto and wp.selection ~= item then
+			wp:RefreshAction(function()
+				wp.selection = item;
+			end);
+		end
+	end,
+
+	--------------------------------------------
+	-- Gets the basic listbox's selection index
+	-- wp: Widget property set
+	-- Returns: Index of the selection
+	--------------------------------------------
+	Selection = function(wp)
+		return wp.selection;
+	end
+}, "Textlist");

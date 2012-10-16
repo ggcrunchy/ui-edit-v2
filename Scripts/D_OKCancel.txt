@@ -1,0 +1,41 @@
+-- Install the OK/Cancel dialog.
+LoadDialog("OKCancel",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("OK / Cancel", .225, false);
+		s.Message = StaticText("", false, "T24", .05);
+			
+		-----------
+		-- Docking
+		-----------
+		local row = SpacedRow(0, .05, .65, .25, .25);
+			OK(s):Dock(s.Pane, "Body", row());
+			Cancel(s):Dock(s.Pane, "Body", row());
+		s.Message:Dock(s.Pane, "Body", .05, .2, .9, .25);
+	end,
+	
+	-- Entry
+	-- message: Message
+	-- condition: Condition
+	------------------------
+	function(s, message, condition)
+		s.Pane:Frame(0, 0, .6, .325);
+		
+		-- Put the condition into a wait state. Store the message and condition.
+		PauseCondition(condition);
+		s.Message:SetString(message);
+		s.condition = condition;
+	end,
+	
+	-- Close --
+	function(s, bCancel)
+		if bCancel then
+			StopCondition(s.condition);
+		else
+			SetCondition(s.condition);
+		end
+	end
+);

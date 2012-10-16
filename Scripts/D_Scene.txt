@@ -1,0 +1,40 @@
+-- Install the scene dialog.
+LoadDialog("Scene",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("Scene Features", .175, false);
+
+		-----------
+		-- Docking
+		-----------
+		local col = SpacedColumn(.05, .05, .15, .35, .15);
+			local row = SpacedRow(0, col());
+				HelpText("Scene Options", "Buttons_Scene", true, "T18", .05):Dock(s.Pane, "Body", row(.45));
+			local row = SpacedRow(.1, col());
+				PushButton("Save", function()
+					Dialog("Save");
+				end):Dock(s.Pane, "Body", row());
+				PushButton("Grid", function()
+					Dialog("Grid", Section("Home").User);
+				end):Dock(s.Pane, "Body", row());
+			local row = SpacedRow(.1, col());
+				PushButton("Load", function()
+					Dialog("Load");
+				end):Dock(s.Pane, "Body", row());
+				PushButton("Clear", ClearScene):Dock(s.Pane, "Body", row());
+			OK(s):Dock(s.Pane, "Body", col());
+	end,
+	
+	-- Entry
+	---------
+	function(s)
+		s.Pane:Frame(0, 0, .4, .3);
+	end,
+	
+	-- Close --
+	function(s, bCancel)
+	end
+);

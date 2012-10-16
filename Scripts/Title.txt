@@ -1,0 +1,142 @@
+------------------------------------------
+-- Title
+-- Builds a titled popup
+-- title: Title to assign
+-- h: Height to assign to title
+-- bMinimize: If true, allow minimization
+-- Returns: Widget property set
+------------------------------------------
+function Title (title, h, bMinimize)
+	local wp = W_New("Title");
+		wp.body, wp.minimize = Backdrop(false), bMinimize and Minimize(wp) or nil;
+		wp:SetPicture("B", GetAsset("Picture", "black"));
+		wp:SetPicture("C", GetAsset("Picture", "purple"));
+		wp:SetText("T18", .05);
+		wp:SetString(title);
+		wp:SetTitleHeight(h);
+	return wp;
+end
+
+-------------------------------------------------
+-- Table with title methods; inherits from popup
+-------------------------------------------------
+W_Inherit("Title", {	
+	-------------------------------
+	-- Generates a new title popup
+	-- wp: Widget property set
+	-------------------------------
+	New = function(wp)
+		wp.banner = Composite.CreatePart(wp.N);
+						
+		-- Event --
+		wp:SetMethod("e", function(event)
+			-- Turn the cursor into an open hand when hovering over the banner, and into a
+			-- clenched hand while the banner is caught.
+			if event == Widget.CompositeGrabPart then
+				SetCursor("gh");
+				
+				-- Record what part of the banner was grabbed.
+				local x, y = wp:GetRect("xy");
+				wp.grab = { x = cx - x, y = cy - y };
+			elseif event == Widget.CompositeEnterPart and not Part.IsGrabbed(wp.banner) then
+				SetCursor("oh");
+			elseif event == Widget.CompositeLeavePart and not Part.IsGrabbed(wp.banner) then
+				SetCursor("std");
+			elseif event == Widget.CompositeDropPart then
+				SetCursor(Part.IsEntered(wp.banner) and "oh" or "std");
+				
+			-- Adjust to account for drags.
+			elseif event == Widget.WidgetPostUpkeep and Part.IsGrabbed(wp.banner) then
+				wp:SetRect("xy", cx - wp.grab.x, cy - wp.grab.y);	
+				wp:Adjust(wp:GetRect("yh"));
+			end
+		end);
+		
+		-- Signal --
+		wp:SetMethod("s", function(cx, cy, x, y, w, h)
+			if PointInBox(cx, cy, x, y, w, h) then
+				Widget.Signal(wp.N);
+				
+				--
+				if not wp.bMin then
+					h = wp.min * h;
+				end
+				if cy < y + h then
+					Part.Signal(wp.banner);
+				end
+			end
+		end);
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			if not wp.bMin then
+				wp:DrawPicture("B", x, y, w, h);
+				Render.DrawBox(x, y, w, h, 1, 1, 1);
+			end
+			
+			--
+			if not wp.bMin then
+				h = wp.min * h;
+			end
+			wp:DrawPicture("C", x, y, w, h)
+			wp:VertCString(x, y, w, h);
+			Render.DrawBox(x, y, w, h, 1, 1, 0);
+		end);		
+	end,
+	
+	----------------------------------------
+	-- Gets the popup's body
+	-- wp: Widget property set
+	-- Returns: Widget property set of body
+	----------------------------------------
+	GetBody = function(wp)
+		return wp.body;
+	end,
+	
+	---------------------------
+	-- Minimizes a popup
+	-- wp: Widget property set
+	---------------------------
+	Minimize = function(wp)
+		-- Toggle the minimize state.
+		wp.bMin = not wp.bMin;
+		
+		-- Get the coordinates of the pane, scaling the height appropriately.
+		local xP, yP, wP, hP = wp:GetRect("xywh");
+		hP = wp.bMin and hP * wp.min or hP / wp.min;
+		
+		-- Iterate through the non-body pane items loaded into the pane. Get their
+		-- local and global coordinates and dimensions, and assign new values that
+		-- will be identical to these in the new system.
+		for paneitem in wp:Iter() do
+			if paneitem ~= wp.body.N then
+				local x, y, w, h = W_PSet(paneitem):GetRect("xywh");
+				W_PSet(paneitem):SetRect("xywh", (x - xP) / wP, (y - yP) / hP, w / wP, h / hP);
+				
+			-- Disallow widget draws and hit tests on minimization. Allow them on
+			-- maximization.
+			else
+				Widget.AllowDockUpdate(paneitem, not wp.bMin);
+				Widget.AllowDockSignalTest(paneitem, not wp.bMin);		
+			end
+		end
+		
+		-- Adjust to account for the new height.
+		wp:Adjust(yP, hP);	
+	end,
+	
+	-------------------------------------
+	-- Sets the popup's title bar height
+	-- wp: Widget property set
+	-- h: Height to assign
+	-------------------------------------
+	SetTitleHeight = function(wp, h)
+		wp.min = h;
+
+		-- Dock the body pane and minimize button.
+		wp.body:Dock(wp, "Normal", 0, wp.min, 1, 1 - wp.min);
+		if wp.minimize then
+			wp.minimize:Dock(wp, "Normal", .85, .05 * wp.min, .1, .85 * wp.min);
+		end	
+	end
+}, "Popup");

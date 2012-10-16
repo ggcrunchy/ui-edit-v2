@@ -1,0 +1,290 @@
+--------------------------------------------
+-- ScanFolder
+-- Builds an iterator over a folder
+-- folder: Folder name
+-- Returns: Iterator which returns filename
+--------------------------------------------
+function ScanFolder (folder)
+	return function (directory, _)
+		if directory then
+			local entry = dirent.read(directory);
+			if entry then
+				return entry.d_name;
+			end
+			dirent.close(directory);
+		end
+	end, dirent.open(folder), nil;
+end
+
+-----------------------------------------------
+-- GetNextLine
+-- Reads a file until it gets a line with text
+-- f: File handle
+-- ld: Loading data
+-----------------------------------------------
+function GetNextLine (f, ld)
+	------------------------------------------
+	-- Iterate until we get a non-blank line.
+	------------------------------------------
+	while true do
+		-------------------------------------------------------------------------------
+		-- Grab a line. If we hit the end of the file, invalidate the line counter and
+		-- return an empty string.
+		-------------------------------------------------------------------------------
+		local s = f:read("*l");
+		if not s then 
+			ld.l = nil;
+			return "";
+		end
+		-----------------------------------------------------------
+		-- Increment the line counter. Note that this starts at 0.
+		-----------------------------------------------------------
+		ld.l = ld.l + 1;
+		-------------------------------------------------------------------------------
+		-- Strip the spaces from before, after, and within any angle brackets found in 
+		-- the line, ignoring those nested within quotes. If the result is non-empty,
+		-- return the string.
+		-------------------------------------------------------------------------------
+		s = string.gsub(s, "%s*<%s*(%w+)%s*>%s*", "<%1>");
+		s = string.gsub(s, "%s*</%s*(%w+)%s*>%s*", "</%1>");
+		if s ~= "" then return s end;
+	end
+end
+
+----------------------------
+-- ProcessOpenTag
+-- Processes an opening tag
+-- ot: Open tag
+-- ld: Loading data
+----------------------------
+function ProcessOpenTag (ot, ld)
+	-----------------------------------------------------------------------------------
+	-- Get the top of the section stack, and the type, if any, referred to by the tag.
+	-----------------------------------------------------------------------------------
+	local st, ty = ld.s[ld.s.n];
+	--------------------------------------------------------------------
+	-- If we are in a list, make sure we are using the appropriate tag.
+	--------------------------------------------------------------------
+	if st.n then
+		ty = st.t;
+		if ty ~= ot then
+			ld.error = string.format("Expecting %s tag on line %i.", ty, ld.l);
+		end
+	---------------------------------------------------------------------
+	-- Otherwise, make sure we are getting an valid, not-yet-loaded tag.
+	---------------------------------------------------------------------
+	else
+		ty = Main.LF[st.s][ot];
+		if not ty or string.sub(ot, 1, 1) == "_" then
+			ld.error = string.format("Invalid tag on line %i.", ld.l);
+		end
+	end
+	----------------------------------------------------------------------
+	-- Push a new section identified by the type to which the tag refers.
+	----------------------------------------------------------------------
+	if not ld.error then
+		table.insert(ld.s, { cd = {}, s = ty, t = ot });
+	end
+	return type(ld.error) == "nil";
+end
+
+---------------------------
+-- ProcessCloseTag
+-- Processes a closing tag
+-- ct: Close tag
+-- ld: Loading data
+---------------------------
+function ProcessCloseTag (ct, ld)
+	------------------------------------------------------------------------
+	-- Make sure the close tag matches the section string at the stack top.
+	------------------------------------------------------------------------
+	local st = ld.s[ld.s.n];
+	if ct == st.t then
+		---------------------------------------------
+		-- Make sure all required fields are loaded.
+		---------------------------------------------
+		if Main.LF[st.s]._R then
+			for i, v in pairs(Main.LF[st.s]._R) do
+				if st.cd[v] == nil then
+					ld.error = string.format("%s field required in %s ending on line %i", v, st.s, ld.l);
+					return false;
+				end
+			end
+		end
+		-------------------------------------------------
+		-- Close off the section and put it in the data.
+		-------------------------------------------------
+		PopTopValue(ld);
+	else
+		ld.error = string.format("Expected /%s tag on line %i.", st.t, ld.l);
+	end
+	return type(ld.error) == "nil";
+end
+
+-------------------------------------------
+-- ProcessValue
+-- Processes a tagged data value
+-- t: Value tag
+-- v: Value to process
+-- ld: Loading data
+-- Returns: True if reading should continue
+--------------------------------------------
+function ProcessValue (t, v, ld)
+	----------------------------------------------------------------------------------
+	-- Get the top of the section stack. Check whether the value is already loaded or
+	-- whether we are trying to load an unexpected value into a list.
+	----------------------------------------------------------------------------------
+	local st = ld.s[ld.s.n];
+	if st.cd[t] then
+		ld.error = string.format("%s field on line %i already loaded.", t, ld.l);
+	elseif st.n and st.t ~= t then
+		ld.error = string.format("Expected %s on line %i.", st.t, ld.l);
+	else
+		----------------------------------------------
+		-- Make sure we are processing a valid value.
+		----------------------------------------------
+		local ty = Main.LF[st.s][t];
+		if not ty or string.sub(ty, 1, 1) == "_" then
+			ld.error = string.format("Invalid %s tag on line %i.", t, ld.l);
+		--------------------------------------------------------
+		-- If presented with primitive-typed value, load these.
+		--------------------------------------------------------
+		elseif ty == "S" then
+			local s = string.gsub(v, "^\"(.*)\"$", "%1_");
+			if s ~= v then
+				AddValue(ld, t, string.gsub(s, "(.*)_$", "%1"));
+			else
+				ld.error = string.format("Invalid string on line %i.", ld.l);
+			end
+		elseif ty == "I" then
+			local i = string.gsub(v, "^(%d+)$", "%1");
+			if i == v then
+				AddValue(ld, t, tonumber(i));
+			else
+				ld.error = string.format("Invalid int on line %i.", ld.l);
+			end
+		elseif ty == "F" then
+			local f = tonumber(v);
+			if f then
+				AddValue(ld, t, f)
+			else
+				ld.error = string.format("Invalid float on line %i.", ld.l);
+			end
+		elseif ty == "B" then
+			if v == "true" then
+				AddValue(ld, t, true);
+			elseif v == "false" then
+				AddValue(ld, t, false);
+			else
+				ld.error = string.format("Invalid boolean on line %i.", ld.l);
+			end
+		--------------------------------------------------------------------------------
+		-- If given a list, load the list count and prepare for the list items. We take
+		-- special consideration for items to be loaded into the list as raw values, as
+		-- opposed to subsections.
+		--------------------------------------------------------------------------------
+		elseif ty == "L" then
+			local c = string.gsub(v, "^(%d+)$", "%1");
+			if c == v then
+				st.cd[t] = tonumber(c);
+				if st.cd[t] ~= 0 then
+					local lt, ls = Main.LF[st.s]._L[t];
+					if string.sub(lt, 1, 1) == ">" then
+						lt, ls = string.gsub(lt, "^>(.*)", "%1"), st.s;
+					end
+					table.insert(ld.s, { cd = { n = 0 }, s = ls, n = st.cd[t], t = lt });
+				end
+			else
+				ld.error = string.format("Invalid count on line %i.", ld.l);
+			end
+		end
+	end
+	return type(ld.error) == "nil";
+end
+
+------------------------------------------------------------------
+-- PopTopValue
+-- Pops the top value in the stack and adds it to the lower entry
+-- ld: Loading data
+------------------------------------------------------------------
+function PopTopValue (ld)
+	local st = ld.s[ld.s.n];
+	table.remove(ld.s);
+	AddValue(ld, st.t, st.cd);
+end
+
+---------------------------------------------
+-- AddValue
+-- Adds a value into the appropriate section
+-- ld: Loading data
+-- t: Value tag
+-- v: Value to be added
+---------------------------------------------
+function AddValue (ld, t, v)
+	----------------------------------------------------------------------------------
+	-- If the top section is a list, put the value into it and decrement the count of
+	-- items. Otherwise, insert it into the top section, using the tag as a key.
+	----------------------------------------------------------------------------------
+	local st = ld.s[ld.s.n];
+	if st.n then
+		table.insert(st.cd, v);
+		DecrementLoopCounter(ld);	
+	else
+		st.cd[t] = v;
+	end
+end
+
+----------------------------------------------------
+-- DecrementLoopCounter
+-- Handles loop management and associated unrolling
+-- ld: Loading data
+----------------------------------------------------
+function DecrementLoopCounter (ld)
+	------------------------------------
+	-- Decrement the stack top counter.
+	------------------------------------
+	local st = ld.s[ld.s.n];
+	st.n = st.n - 1;
+	---------------------------------------------
+	-- If the list is ended, put it in the data.
+	---------------------------------------------
+	if st.n == 0 then
+		PopTopValue(ld);
+	end
+end
+
+---------------------------------------------------------
+-- ReadScene
+-- Reads and processes the next line from the scene file
+-- f: File handle
+-- ld: Loading data
+-- Returns: True if reading should continue
+---------------------------------------------------------
+function ReadScene (f, ld)
+	-----------------------------------------------------------------
+	-- Grab a line off the file. Quit if the end of file is reached.
+	-----------------------------------------------------------------
+	local nl = GetNextLine(f, ld);
+	if ld.l then
+		--------------------------------------
+		-- Try to extract tags from the line.
+		--------------------------------------
+		local ot = string.gsub(nl, "^<(%w+)>.*", "%1");
+		local ct = string.gsub(nl, ".*</(%w+)>$", "%1");
+		------------------------------------------------------------------------------
+		-- If we have an open or close tag is found, process the tag. Otherwise, read 
+		-- and process a value from the string, ensuring the open/close tags match.
+		------------------------------------------------------------------------------
+		if ot == ct then
+			local vt = string.gsub(nl, "^<%w+>(.+)</%w+>$", "%1");
+			return ProcessValue(ot, vt, ld);
+		elseif ot ~= nl then
+			return ProcessOpenTag(ot, ld);
+		elseif ct ~= nl then
+			return ProcessCloseTag(ct, ld);
+		else
+			ld.error = string.format("Invalid syntax on line %i.", ld.l);
+		end
+	end
+	return false;
+end

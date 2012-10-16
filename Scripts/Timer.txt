@@ -1,0 +1,73 @@
+------------------------
+-- Current tick counter
+------------------------
+local _Time;
+
+----------------------------
+-- Table with timer methods
+----------------------------
+DefineAssetType("Timer", {
+	----------------------------
+	-- Gets the timeout
+	-- tp: Timer property set
+	-- Returns: Current timeout
+	----------------------------
+	GetTimeout = function(tp)
+		return tp.timeout;
+	end,
+	
+	---------------------------------------------------
+	-- Primes the timer to a given timeout
+	-- tp: Timer property set
+	-- timeout: Timeout to assign
+	-- bImmediate: If true, execute action immediately
+	---------------------------------------------------
+	SetTimeout = function(tp, timeout, bImmediate)
+		tp.base, tp.timeout = Time, timeout;
+		
+		-- Invoke the action.
+		if bImmediate then
+			tp.action();
+		end
+	end,
+	
+	-----------------------------------------------------
+	-- Updates the timer and performs actions on timeout
+	-- tp: Timer property set
+	-----------------------------------------------------
+	Update = function(tp)
+		-- If the timeout has elapsed, perform the action and update the timer.
+		if tp.timeout and Time - tp.base > tp.timeout then
+			tp.base = Time;
+			tp.action();
+		end	
+	end
+},
+
+-- New
+-- tp: Timer property set
+-- action: Action to perform on timeout
+-- timeout: Timeout, in seconds
+----------------------------------------
+function(tp, action, timeout)
+	tp.action = action;
+	tp:SetTimeout(timeout);
+end);
+
+----------------------------------------------------
+-- Delay
+-- Delays the application, giving control to others
+-- milliseconds: Milliseconds to delay
+----------------------------------------------------
+function Delay (milliseconds)
+	_Time = nil;
+	SDL.Delay(milliseconds);
+end
+	
+-- Override the time variable.
+BindVariable("Time", function()
+	if not _Time then
+		_Time = SDL.GetTicks();
+	end
+	return _Time;	
+end, function()	end);

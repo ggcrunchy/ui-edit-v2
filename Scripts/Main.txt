@@ -1,0 +1,18 @@
+-- Center the cursor.
+local w, h = Render.GetVideoSize();
+SDL.WarpMouse(w / 2, h / 2);
+
+-- Open the home screen. Run the main loop.
+Screen("Home");
+while not Quit do
+	-- Collect and process input.
+	UpdateInput();
+	
+	-- Clear the scene, update the UI, and render the scene.
+	Render.PrepareFrame();
+	UI.Update();
+	Render.DrawFrame();
+	
+	-- Give time to other threads.
+	Delay(1);
+end

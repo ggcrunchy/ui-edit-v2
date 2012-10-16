@@ -1,0 +1,28 @@
+----------------------------------
+-- Builds a dialog box for a type
+-- type: Type for which to build
+-- Returns: Widget property set
+----------------------------------
+function TypeDialog (type)
+	-- Install the common and specific dialog features.
+	local dialog, pics = Title("", .15, true), ListboxBasic(3);
+	W_Type(type).Dialog(dialog, {
+		pics = pics,
+		up = ScrollButton(pics, true, 300),
+		down = ScrollButton(pics, false, 300),
+		help = HelpText("Features", "Setup_" .. type, true, "T18", .05),
+		set = PushButton("Set", function()
+			Dialog("Pictures", pics:GetSelection().datum);
+		end),
+		grid = PushButton("Grid", function()
+			Dialog("Grid", UserW_Current());
+		end),
+		tag = PushButton("Tag", function()
+			Dialog("Tag", type);
+		end)
+	});
+	
+	-- Allow for bubbling up.
+	dialog:Bubble();
+	return dialog;
+end

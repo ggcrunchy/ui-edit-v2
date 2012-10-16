@@ -1,0 +1,151 @@
+--------------------------------------
+-- PushButton
+-- Push button setup procedure
+-- string: String to assign to button
+-- action: Push button action
+-- Returns: Push button property set
+--------------------------------------
+function PushButton (string, action)
+	local wp = W_New("PushButton", action);
+		wp:SetPicture("D", GetAsset("Picture", "B_n"));
+		wp:SetPicture("O", GetAsset("Picture", "B_e"));
+		wp:SetPicture("G", GetAsset("Picture", "B_g"));
+		wp:SetText("T24", .25);
+		wp:SetString(string);
+	return wp;
+end
+
+--------------------------------------
+-- OK
+-- Builds an OK button
+-- s: Section to which button belongs
+-- Returns: Widget property set
+--------------------------------------
+function OK (s)
+	return PushButton("OK", s:Close(false));
+end
+
+--------------------------------------
+-- Cancel
+-- Builds a Cancel button
+-- s: Section to which button belongs
+-- Returns: Widget property set
+--------------------------------------
+function Cancel (s)
+	return PushButton("Cancel", s:Close(true));
+end
+
+--------------------------------
+-- Minimize
+-- Builds a minimize button
+-- wp: Pane property set
+-- Returns: Widget property set
+--------------------------------
+function Minimize (wp)
+	return PushButton("-", function()
+		wp:Minimize();
+	end);
+end
+
+--------------------------------------------------------
+-- Table with push button methods; inherits from widget
+--------------------------------------------------------
+W_Inherit("PushButton", {
+	--------------------------------
+	-- Deletes the user push button
+	-- wp: Widget property set
+	--------------------------------
+	Delete = function(wp)
+	
+	end,
+	
+	------------------------------------
+	-- Loads the push button dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	------------------------------------
+	Dialog = function(dp, widgets)
+		-------------------------------
+		-- Loading: push button dialog
+		-------------------------------
+		dp:SetString("Push Button Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Default", "D");
+		widgets.pics:Append("Over", "O");
+		widgets.pics:Append("Grabbed", "G");
+		
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+
+	-------------------------------
+	-- Generates a new push button
+	-- wp: Widget property set
+	-- action: Push button action
+	-------------------------------
+	New = function(wp, action)
+		-- Event --
+		wp:SetMethod("e", function(event)
+			if event == Widget.WidgetDrop and Widget.IsEntered(wp.N) then
+				action();
+			end
+		end);
+		
+		-- Signal --
+		wp:SetMethod("s", wp:ST_Basic());
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			-- Draw the button graphic.
+			local picture, bG, bE = "D", Widget.IsGrabbed(wp.N), Widget.IsEntered(wp.N);
+			if bG and bE then
+				picture = "G";
+			elseif bG or bE then
+				picture = "O";
+			end
+			wp:DrawPicture(picture, x, y, w, h);
+						
+			-- Draw the button's string.
+			wp:VertCString(x, y, w, h);
+		end);
+	end,
+	
+	--------------------------------------------------
+	-- Prints the push button data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which push button is printed
+	-- indent: Indent string
+	--------------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("PushButton", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+		
+	-------------------------------------
+	-- Generates a new user push button
+	-- Returns: Push button property set
+	-------------------------------------
+	UserNew = function()
+		return UserW_Widget("PushButton", function() end);
+	end
+}, "Widget");
+
+-- Load the push button types.
+return Load{
+	"ScrollButton.txt"
+};

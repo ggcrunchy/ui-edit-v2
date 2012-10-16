@@ -1,0 +1,75 @@
+----------------------
+-- Current save state
+----------------------
+local _bSave;
+
+-- Install the save dialog.
+LoadDialog("Save",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("Save", .15, false);
+		s.Filename = EditboxBasic("", "T18", FilterString(15, false), 300, 250);
+      	
+		-----------
+		-- Docking
+		-----------
+		local col = SpacedColumn(.1, .05, .1, .9, .225);
+			HelpText("Save", "Name_Save", true, "T18", .05):Dock(s.Pane, "Body", col());
+			s.Filename:Dock(s.Pane, "Body", col());
+		local row = SpacedRow(.05, .05, .775, .2, .2);
+   		PushButton("Save", function()
+            if s.Filename:GetString() ~= "" then
+      			local scene = io.open("Scenes/" .. s.Filename:GetString() .. ".sce", "w");
+      			if scene then
+      				-- Dump the scene to the file.
+      				for _, component in Section("Home").Type:Iter() do 
+      					for _, widget in component.datum.WidgetList:Iter() do
+      						widget.datum:Print(scene, "");
+      					end
+      				end
+      				
+      				-- Commit the save. Indicate that there are no unsaved changes and set
+      				-- the save filename.
+      				scene:close();
+      				Save, SaveName = false, s.Filename:GetString() .. ".sce";
+      				
+      				-- Alert the user that the save occurred.
+      				Message(s.Filename:GetString() .. ".sce saved.");
+      			end
+      		else
+               Message("Empty filename not allowed.");
+      		end
+   		end):Dock(s.Pane, "Body", row(.2));
+		OK(s):Dock(s.Pane, "Body", row());
+         
+		------------------------
+		-- Loading: focus chain
+		------------------------
+		s:LoadFocusChain(s.Filename);
+	end,
+	
+	-- Entry
+	---------
+	function(s)
+		s.Pane:Frame(0, 0, .4, .275);
+		
+		-- Cache the save filename, trimming the extension.
+		local filename = SaveName;
+		s.Filename:SetString(filename and string.sub(filename, 1, -5) or "");
+	end,
+	
+	-- Close --
+	function(s, bCancel)
+	end
+);
+
+-- Override the save variable.
+BindVariable("Save", function()
+	return _bSave;
+end, function(bSave)
+	_bSave = bSave;
+	SDL.WM_SetCaption("Xibalba UI Editor" .. (bSave and "*" or ""), "");
+end);

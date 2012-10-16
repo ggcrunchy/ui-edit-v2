@@ -1,0 +1,59 @@
+-- Install the tag dialog.
+LoadDialog("Tag",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("Tag", .225, false);
+		s.Tag = EditboxBasic("", "T18", FilterString(8, true), 300, 250);
+		s.Type = StaticText("", false, "T18", 0);
+			
+		-----------
+		-- Docking
+		-----------
+		local col = SpacedColumn(.1, .05, .15, .4, .2);
+			HelpText("Tag", "Text_Tag", true, "T18", .05):Dock(s.Pane, "Body", col());
+			local row = SpacedRow(0, col());
+				s.Type:Dock(s.Pane, "Body", row());
+      			s.Tag:Dock(s.Pane, "Body", row(.1));
+     		local row = SpacedRow(0, col());
+				PushButton("OK", s:CloseIf(false, function()
+				if s.Tag:GetString() ~= "" then
+					local tag = s.type .. s.Tag:GetString();
+					if not UI.FindWidget(tag) or tag == Widget.GetTag(UserW_Current().N) then
+						return true;
+					else
+						Message("Tag in use by another " .. s.type .. ".", false); 
+					end 
+				else
+					Message("Empty tag not allowed.", false);
+				end
+				end)):Dock(s.Pane, "Body", row());
+				Cancel(s):Dock(s.Pane, "Body", row(.1));
+		
+		------------------------
+		-- Loading: focus chain
+		------------------------
+		s:LoadFocusChain(s.Tag);
+	end,
+	
+	-- Entry
+	-- type: Type of widget
+	------------------------
+	function(s, type)
+		s.Pane:Frame(0, 0, .4, .325);
+		
+		-- Decompose the tag into type and ID parts.
+		s.Tag:SetString(UserW_Current():GetTag(type));
+		s.Type:SetString(type);
+		s.type = type;
+	end,
+	
+	-- Close --
+	function(s, bCancel)
+		if not bCancel then
+			Widget.SetTag(UserW_Current().N, s.type .. s.Tag:GetString());		
+		end
+	end
+);

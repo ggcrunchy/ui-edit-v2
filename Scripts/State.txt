@@ -1,0 +1,29 @@
+------------------------
+-- Get and set routines
+------------------------
+local _Get, _Set = {}, {};
+
+----------------------------------
+-- Binds routines to a variable
+-- variable: Variable to bind
+-- get, set: Get and set routines
+----------------------------------
+function BindVariable (variable, get, set)
+	_Get[variable], _Set[variable] = get, set;
+end
+
+-- Bind the metatable system.
+setmetatable(_G, {
+	__index = function(_, key)
+		if _Get[key] then
+			return _Get[key]();
+		end
+	end,
+	__newindex = function(_, key, value)
+		if _Set[key] then
+			_Set[key](value);
+		else
+			rawset(_G, key, value);
+		end	
+	end
+});

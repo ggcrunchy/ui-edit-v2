@@ -1,0 +1,121 @@
+----------------------------------
+-- Checkbox
+-- Checkbox setup procedure
+-- Returns: Checkbox property set
+----------------------------------
+function Checkbox ()
+	local wp = W_New("Checkbox");
+		wp:SetPicture("D", GetAsset("Picture", "white"));
+		wp:SetPicture("C", GetAsset("Picture", "C_c"));
+	return wp;
+end
+
+-----------------------------------------------------
+-- Table with checkbox methods; inherits from widget
+-----------------------------------------------------
+W_Inherit("Checkbox", {
+	-----------------------------
+	-- Deletes the user checkbox
+	-- wp: Widget property set
+	-----------------------------
+	Delete = function(wp)
+	
+	end,	
+
+	---------------------------------
+	-- Loads the checkbox dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	---------------------------------
+	Dialog = function(dp, widgets)
+		----------------------------
+		-- Loading: checkbox dialog
+		----------------------------
+		dp:SetString("Checkbox Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Default", "D");
+		widgets.pics:Append("Checked", "C");
+		
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+
+	----------------------------
+	-- Generates a new checkbox
+	-- wp: Widget property set
+	----------------------------
+	New = function(wp)				
+		-- Event --
+		wp:SetMethod("e", function(event)
+			if event == Widget.WidgetGrab then
+				wp:SetCheck(not wp:GetCheck());
+			end
+		end);
+		
+		-- Signal --
+		wp:SetMethod("s", wp:ST_Basic());
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:DrawPicture(wp:GetCheck() and "C" or "D", x, y, w, h);
+			Render.DrawBox(x, y, w, h, 1, 0, 0);
+		end);
+	end,
+	
+	-----------------------------------------------
+	-- Prints the checkbox data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which checkbox is printed
+	-- indent: Indent string
+	-----------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("Checkbox", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+		
+	----------------------------------
+	-- Generates a new user checkbox
+	-- Returns: Checkbox property set
+	----------------------------------
+	UserNew = function()
+		return UserW_Widget("Checkbox");
+	end,
+
+	---------------------------------
+	-- Gets the checkbox check state
+	-- wp: Widget property set
+	-- Returns: Check state
+	---------------------------------
+	GetCheck = function(wp)
+		return wp.bCheck == true;
+	end,
+			
+	---------------------------------------------------
+	-- Sets the checkbox check state
+	-- wp: Widget property set
+	-- bCheck: Check state to apply
+	-- bForceRefresh: If true, refresh unconditionally
+	---------------------------------------------------
+	SetCheck = function(wp, bCheck, bForceRefresh)
+		if bCheck ~= wp:GetCheck() or bForceRefresh then
+			wp:RefreshAction(function()
+				wp.bCheck = bCheck;
+			end);
+		end
+	end
+}, "Widget");

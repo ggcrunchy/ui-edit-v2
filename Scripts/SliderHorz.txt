@@ -1,0 +1,173 @@
+-------------------------------------------
+-- SliderHorz
+-- Horizontal slider setup procedure
+-- sx, ex: Thumb start/end x-coordinates
+-- ty: Thumb y-coordinates
+-- tw, th: Thumb dimensions
+-- Returns: Horizontal slider property set
+-------------------------------------------
+function SliderHorz (sx, ex, ty, tw, th)
+	local wp = W_New("SliderHorz", sx, ex, ty, tw, th);
+		wp:SetPicture("B", GetAsset("Picture", "S_b"));
+		wp:SetPicture("TD", GetAsset("Picture", "ST_n"));
+		wp:SetPicture("TE", GetAsset("Picture", "ST_e"));
+		wp:SetPicture("TG", GetAsset("Picture", "ST_g"));
+	return wp;
+end
+
+--------------------------------------------------------------
+-- Table with horizontal slider methods; inherits from widget
+--------------------------------------------------------------
+W_Inherit("SliderHorz", {	
+	--------------------------------------
+	-- Deletes the user horizontal slider
+	-- wp: Widget property set
+	--------------------------------------
+	Delete = function(wp)
+	
+	end,	
+
+	------------------------------------------
+	-- Loads the horizontal slider dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	------------------------------------------
+	Dialog = function(dp, widgets)
+		-------------------------------------
+		-- Loading: horizontal slider dialog
+		-------------------------------------
+		dp:SetString("Horizontal Slider Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Backdrop", "B");
+		widgets.pics:Append("Thumb Default", "TD");
+		widgets.pics:Append("Thumb Entered", "TE");
+		widgets.pics:Append("Thumb Grabbed", "TG");
+		
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		local col = SpacedColumn(.1, .7, .2, .1, .1);
+			widgets.up:Dock(dp, "Body", col());
+			widgets.down:Dock(dp, "Body", col());
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+
+	-----------------------------------------
+	-- Generates a new horizontal slider
+	-- wp: Widget property set
+	-- sx, ex: Thumb start/end x-coordinates
+	-- ty: Thumb y-coordinate
+	-- tw, th: Thumb dimensions
+	-----------------------------------------
+	New = function(wp, sx, ex, ty, tw, th)
+		wp.sx, wp.ex, wp.ty, wp.tw, wp.th, wp.thumb = sx, ex, ty, tw, th, Composite.CreatePart(wp.N);
+				
+		-- Event --
+		wp:SetMethod("e", function(event)
+			local range, x, w = wp.ex - wp.sx, wp:GetRect("xw");
+			
+			-- Snap the offset on grabs.
+			if event == Widget.WidgetGrab then
+				wp:SetOffset((cx - (x + wp.sx * w)) / (range * w));
+						
+			-- Get the off-center position on thumb grabs.	
+			elseif event == Widget.CompositeGrabPart then
+				-- Record the x-displacement from the thumb center to the grab point.
+				local tx = wp.sx + wp:GetOffset() * range;
+				wp.dOffset = (cx - (x + tx * w)) / (range * w);
+						
+			-- Fit the offset to account for drags.
+			elseif event == Widget.WidgetPostUpkeep and Part.IsGrabbed(wp.thumb) then
+				wp:SetOffset((cx - (x + wp.sx * w)) / (range * w) - wp.dOffset);
+			end		
+		end);
+	
+		-- Signal --
+		wp:SetMethod("s", function(cx, cy, x, y, w, h)
+			-- If the cursor hits the slider, find the box centered at the current 
+			-- offset. If the cursor hits this box as well, it is over the thumb.
+			if PointInBox(cx, cy, x, y, w, h) then
+				Widget.Signal(wp.N);
+				local tx = wp.sx + wp:GetOffset() * (wp.ex - wp.sx) - wp.tw / 2;
+				local ty = wp.ty - wp.th / 2;
+				if PointInBox(cx, cy, x + tx * w, y + ty * h, wp.tw * w, wp.th * h) then
+					Part.Signal(wp.thumb);
+				end
+			end
+		end);
+			
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:DrawPicture("B", x, y, w, h);
+			
+			-- Get the global thumb position and dimensions, given its offset.
+			local tx = wp.sx + wp:GetOffset() * (wp.ex - wp.sx) - wp.tw / 2;
+			local ty = wp.ty - wp.th / 2;
+			
+			-- Draw the thumb graphic.
+			local picture, bG, bE = "TD", Part.IsGrabbed(wp.thumb), Part.IsEntered(wp.thumb);
+			if bG and bE then
+				picture = "TG";
+			elseif bG or bE then
+				picture = "TE";
+			end
+			wp:DrawPicture(picture, x + tx * w, y + ty * h, wp.tw * w, wp.th * h);
+		end);
+	end,
+	
+	--------------------------------------------------------
+	-- Prints the horizontal slider data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which horizontal slider is printed
+	-- indent: Indent string
+	--------------------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("SliderHorz", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+		
+	-------------------------------------------
+	-- Generates a new user horizontal slider
+	-- Returns: Horizontal slider property set
+	-------------------------------------------
+	UserNew = function()
+		return UserW_Widget("SliderHorz", .1, .9, .5, .15, .15);
+	end,
+
+	-------------------------------------
+	-- Gets the horizontal slider offset
+	-- wp: Widget property set
+	-- Returns: Slider offset
+	-------------------------------------
+	GetOffset = function(wp)
+		return wp.offset or 0;
+	end,
+			
+	-------------------------------------
+	-- Sets the horizontal slider offset
+	-- wp: Widget property set
+	-- offset: Offset to assign
+	-------------------------------------
+	SetOffset = function(wp, offset)
+		-- Clamp and set the offset. Call a refresh if it changes.
+		offset = ClampIn(offset, 0, 1);
+		if offset ~= wp:GetOffset() then
+			wp:RefreshAction(function()
+				wp.offset = offset;
+			end);
+		end
+	end
+}, "Widget");

@@ -1,0 +1,113 @@
+-- Install the pictures setup dialog.
+LoadDialog("PicturesSetup",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("Pictures Setup", .1, true);
+		s.Picture = W_Prime("Widget");
+		s.PictureList = ListboxBasic(4);
+
+		----------------------------
+		-- Loading: picture display
+		----------------------------
+		-- Event --
+		s.Picture:SetMethod("e", function(event)
+			local x, y, w, h = s.Picture:GetRect("xywh");
+			if event == Widget.WidgetPreUpkeep then
+				if Widget.IsGrabbed(s.Picture.N) then
+					s.cx, s.cy = s.Picture:Clip(cx, cy);
+					s.x2, s.y2 = (s.cx - x) / w, (s.cy - y) / h;
+					s.table[s.key]:SetTexels(SortPairs(s.x1, s.y1, s.x2, s.y2));
+				end
+			elseif event == Widget.WidgetGrab then
+				s.cx, s.cy = (s.cx - x) / w, (s.cy - y) / h;
+				s.x1, s.y1, s.x2, s.y2 = s.cx, s.cy, s.cx, s.cy;
+			end
+		end);
+					
+		-- Signal --
+		s.Picture:SetMethod("s", s.Picture:ST_Basic());
+
+		-- Update --
+		s.Picture:SetMethod("u", function(x, y, w, h)
+			s.PictureList:GetSelection().datum:Draw(x, y, w, h);
+			Render.DrawBox(x, y, w, h, 1, 1, 1);
+			local bx, by, bw, bh = Rect(s.x1, s.y1, s.x2, s.y2);
+			Render.DrawBox(x + bx * w, y + by * h, bw * w, bh * h, 1, 0, 0);
+		end);
+
+		-------------------------
+		-- Loading: picture list
+		-------------------------
+		-- Refresh --
+		s.PictureList:SetMethod("onRefresh", function(bNew)
+			if bNew then
+				s.table[s.key] = s.PictureList:GetSelection().datum:Copy();
+				s.table[s.key]:SetTexels(s.x1, s.y1, s.x2, s.y2);
+				
+				-- On entry, leave the rectangle alone. Otherwise, reset it.
+				if s.bBegin then
+					s.bBegin = false;
+				else
+					s.x1, s.y1, s.x2, s.y2 = 0, 0, 1, 1;
+				end
+			end
+		end);
+						
+		-----------
+		-- Docking
+		-----------
+		OK(s):Dock(s.Pane, "Body", .05, .85, .2, .1);
+		s.PictureList:Dock(s.Pane, "Body", .7, .25, .2, .5);
+		local col = SpacedColumn(.3, .8, .25, .1, .1);
+			ScrollButton(s.PictureList, true, 300):Dock(s.Pane, "Body", col());
+			ScrollButton(s.PictureList, false, 300):Dock(s.Pane, "Body", col());
+		s.Picture:Dock(s.Pane, "Body", .05, .25, .6, .5);
+	end,
+	
+	-- Entry
+	-- table: Table
+	-- key: Key
+	----------------
+	function(s, table, key)
+		s.Pane:Frame(0, 0, .6, .6);
+		
+		-- Reset the rectangle. Cache the table and key. Indicate unsaved changes.
+		s.x1, s.y1, s.x2, s.y2, s.table, s.key, s.bBegin = 0, 0, 1, 1, table, key, true;
+		Save = true;
+
+		-- Cache the file currently loaded into the picture slot. If the picture is valid,
+		-- acquire its rectangle.
+		local current = table[key]:GetFile();
+		if current ~= "" then
+			s.x1, s.y1, s.x2, s.y2 = table[key]:GetTexels();		
+		end
+		s.PictureList:Fill(
+			-- Supply --
+			function()
+				return coroutine.wrap(function()
+					-- Scan the texture folder, yielding each picture loaded.
+					local index = 0;
+					for file in ScanFolder("Assets/Textures") do
+						local pp = NewAsset("Picture");
+						if pp:LoadPicture("Assets/Textures/" .. file, 0, 0, 1, 1) then
+							coroutine.yield(index, file, pp);
+							index = index + 1;
+						end
+					end
+				end);
+			end,
+			
+			-- Choice Test --
+			function(text, datum)
+				return "Assets/Textures/" .. text == current;	
+			end
+		);
+	end,
+	
+	-- Close --
+	function(s, bCancel)
+	end
+);

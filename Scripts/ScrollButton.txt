@@ -1,0 +1,168 @@
+---------------------------------------
+-- ScrollButton
+-- Scroll button setup procedure
+-- tp: Textlist property set
+-- bUp: Up scroll boolean
+-- timeout: Scroll repeat timeout
+-- amount: Scroll amount
+-- Returns: Scroll button property set
+---------------------------------------
+function ScrollButton (tp, bUp, timeout, amount)
+	local wp = W_New("ScrollButton");
+		wp.amount, wp.timeout = amount or 1, timeout;
+		wp:SetPicture("D", GetAsset("Picture", bUp and "B_nlu" or "B_nld"));
+		wp:SetPicture("O", GetAsset("Picture", bUp and "B_elu" or "B_eld"));
+		wp:SetPicture("G", GetAsset("Picture", bUp and "B_glu" or "B_gld"));
+		wp:SetTarget(tp, bUp);
+	return wp;
+end
+
+---------------------------------------------
+-- ScrollPair
+-- Builds a scroll button pair
+-- tp: Textlist property set
+-- timeout: Scroll repeat timeout
+-- amount: Scroll amount
+-- Returns: Up and down button property sets
+---------------------------------------------
+function ScrollPair (tp, timeout, amount)
+	return ScrollButton(tp, true, timeout, amount), ScrollButton(tp, false, timeout, amount);
+end
+
+---------------------------------------------------------------
+-- Table with scroll button methods; inherits from push button
+---------------------------------------------------------------
+W_Inherit("ScrollButton", {	
+	----------------------------------
+	-- Deletes the user scroll button
+	-- wp: Widget property set
+	----------------------------------
+	Delete = function(wp)
+	
+	end,
+
+	--------------------------------------
+	-- Loads the scroll button dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	--------------------------------------
+	Dialog = function(dp, widgets)
+		---------------------------------
+		-- Loading: scroll button dialog
+		---------------------------------
+		dp:SetString("Scroll Button Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Default", "D");
+		widgets.pics:Append("Over", "O");
+		widgets.pics:Append("Grabbed", "G");
+		
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+
+	----------------------------------
+	-- Generates a new scroll button
+	-- wp: Widget property set
+	----------------------------------
+	New = function(wp)
+		wp.counter = NewAsset("Timer", function()
+			local target, bUp = wp:GetTarget();
+			if target then
+				target:Scroll(bUp, wp.amount);
+			end			
+		end);
+	
+		-- Event --
+		wp:SetMethod("e", function(event)
+			-- If the cursor is grabbed, enable the timer, executing immediately.
+			if event == Widget.WidgetGrab then
+				wp.counter:SetTimeout(wp.timeout, true);
+				
+			-- On drops, disable the timer.
+			elseif event == Widget.WidgetDrop then
+				wp.counter:SetTimeout(nil);
+			
+			-- Update the timer.
+			elseif event == Widget.WidgetPostUpkeep then
+				wp.counter:Update();
+			end
+		end);
+		
+		-- Signal --
+		wp:SetMethod("s", wp:ST_Basic());
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			-- Draw the button graphic.
+			local picture, bG, bE = "D", Widget.IsGrabbed(wp.N), Widget.IsEntered(wp.N);
+			if bG and bE then
+				picture = "G";
+			elseif bG or bE then
+				picture = "O";
+			end
+			wp:DrawPicture(picture, x, y, w, h);
+		end);
+	end,
+
+	----------------------------------------------------
+	-- Prints the scroll button data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which scroll button is printed
+	-- indent: Indent string
+	----------------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("ScrollButton", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+		
+	---------------------------------------
+	-- Generates a new user scroll button
+	-- Returns: Scroll button property set
+	---------------------------------------
+	UserNew = function()
+		return UserW_Widget("ScrollButton", nil, false, false, 300)
+	end,
+
+	-----------------------------------------
+	-- Gets the scroll button's target
+	-- wp: Widget property set
+	-- Returns: Target and up scroll boolean
+	-----------------------------------------
+	GetTarget = function(wp)
+		return wp.target, wp.bUp;
+	end,
+		
+	---------------------------------------
+	-- Binds a target to the scroll button
+	-- wp: Widget property set
+	-- tp: Target property set
+	-- bUp: Up scroll boolean
+	---------------------------------------
+	SetTarget = function(wp, tp, bUp)
+		-- Unbind any current target. Bind the new target.
+		if wp.target then
+			wp.target:Call("onUnbind", wp.bUp);
+		end
+		if tp then
+			tp:Call("onBind", wp, bUp);
+		end
+		
+		-- Store the properties.
+		wp.target, wp.bUp = tp, bUp;
+	end
+}, "PushButton");

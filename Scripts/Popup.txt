@@ -1,0 +1,148 @@
+-------------------------------
+-- Popup
+-- Popup setup procedure
+-- Returns: Popup property set
+-------------------------------
+function Popup ()
+	local wp = W_New("Popup");
+		wp:SetPicture("B", GetAsset("Picture", "black"));
+	return wp;
+end
+
+------------------------------------------------
+-- Table with popup methods; inherits from pane
+------------------------------------------------
+W_Inherit("Popup", {
+	---------------------------
+	-- Deletes the user popup
+	-- wp: Widget property set
+	---------------------------
+	Delete = function(wp)
+	
+	end,
+	
+	-------------------------------
+	-- Loads the popup dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	-------------------------------
+	Dialog = function(dp, widgets)
+		-------------------------
+		-- Loading: popup dialog
+		-------------------------
+		dp:SetString("Popup Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Backdrop", "B");
+		
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+	
+	---------------------------
+	-- Generates a new popup
+	-- wp: Widget property set
+	---------------------------
+	New = function(wp)
+		-- Signal --
+		wp:SetMethod("s", wp:ST_Basic());
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:DrawPicture("B", x, y, w, h);
+			Render.DrawBox(x, y, w, h, 1, 1, 1);
+		end);		
+	end,
+	
+	--------------------------------------------
+	-- Prints the popup data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which popup is printed
+	-- indent: Indent string
+	--------------------------------------------
+	Print = function(wp, stream, indent)
+		wp:PrintWidget(stream, indent, "Popup", function()
+ 			wp:PrintPictures(stream, indent, "B");
+		end);
+	end,
+	
+	-------------------------------
+	-- Generates a new user popup
+	-- data: Loading data
+	-- Returns: Popup property set
+	-------------------------------
+	UserNew = function(data)
+		local wp = UserW_Pane("Popup");
+			if data then
+				wp:LoadPictures(data, "B");
+			else
+				wp:SetPicture("B", NewAsset("Picture"));
+			end	
+		return wp;
+	end,
+	
+	---------------------------------------------------------
+	-- Adjusts the popup for minimization and the snap chain
+	-- wp: Widget property set
+	-- ay: Popup y-coordinate used by adjustment
+	-- ah: Popup height used by adjustment
+	---------------------------------------------------------
+	Adjust = function(wp, ay, ah)
+		-- Accumulate the snap chain element heights and y-offsets.
+		local sh = 0;
+		for pane in wp:SnapChain() do
+			sh = sh + pane.sy + pane:GetRect("h");
+		end
+		
+		-- If the popup or its snap chain spills off the screen, move it up as necessary.
+		ay = math.min(ay, 1 - ah - sh);
+		wp:SetRect("yh", ay, ah);
+		
+		-- Reposition each snap chain element relative to the popup.
+		local x = wp:GetRect("x");
+		ay = ay + ah;
+		for pane in wp:SnapChain() do
+			pane:SetRect("xy", x + pane.sx, ay + pane.sy);
+			ay = ay + pane.sy + pane:GetRect("h");
+		end
+	end,
+	
+	------------------------------------------------
+	-- Builds an iterator over the snap chain
+	-- wp: Widget property set
+	-- Returns: Iterator which returns property set
+	------------------------------------------------
+	SnapChain = function(wp)
+		return function(_, wp)
+			return wp.snap;
+		end, nil, wp;
+	end,	
+
+	--------------------------------------
+	-- Snaps the pane to the popup
+	-- wp: Widget property set
+	-- pane: Pane to snap
+	-- x, y: Relative element coordinates
+	--------------------------------------
+	SnapPane = function(wp, pane, x, y)
+		wp.snap, pane.sx, pane.sy = pane, x, y;
+
+		-- Adjust to account for the addition.
+		wp:Adjust(wp:GetRect("yh"));
+	end
+}, "Pane");
+
+-- Load the popup types.
+return Load{
+	"Title.txt"
+};

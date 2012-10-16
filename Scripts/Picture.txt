@@ -1,0 +1,306 @@
+------------------------------
+-- Table with picture methods
+------------------------------
+DefineAssetType("Picture", {
+	--------------------------------------
+	-- Duplicates the picture
+	-- pp: Picture property set
+	-- Returns: Picture property set copy
+	--------------------------------------
+	Copy = function(pp)
+		-- Duplicate the picture property set.
+		local copy = table.copy(pp);
+		
+		-- Load all pictures according to the picture type, using the same features.
+		if pp:Type() == "Basic" then
+			copy.picture = pp.picture and Render.LoadPicture(pp.file, pp:GetTexels());
+		else
+			for index, picture in ipairs(pp.picture) do
+				copy.picture[index] = picture:Copy();
+			end
+		end
+		return copy;
+	end,
+
+	---------------------------------------------------
+	-- Draws the picture
+	-- pp: Picture property set
+	-- x, y: Draw coordinates
+	-- w, h: Draw dimensions
+	-- bIgnore: If true, ignore if there is no picture
+	---------------------------------------------------
+	Draw = function(pp, x, y, w, h, bIgnore)
+		-- If the picture is a plain userdata, draw it. 
+		if pp:Type() == "Basic" then
+			if pp.picture then
+				local s1, t1, s2, t2 = pp:GetTexels();
+				
+				-- Set the appropriate texels, flipping as necessary.
+				local S1, S2 = SwapIf(s1, s2, pp.bHorizontal);
+				local T1, T2 = SwapIf(t1, t2, pp.bVertical);
+				pp:SetTexels(S1, T1, S2, T2);
+				
+				-- Draw the picture using the bound texels.
+				Render.DrawPicture(pp.picture, x, y, w, h);
+				
+				-- Restore the original texels.
+				pp:SetTexels(s1, t1, s2, t2);
+			elseif not bIgnore then
+				Render.DrawBox(x, y, w, h, 1, 1, 1);
+			end
+			
+		-- The picture may also be a table, broken up into nine images: four corners, four
+		-- sides, and the middle, where the corners remain fixed above a certain threshold,
+		-- while the sides and middle expand to accomodate the new size.
+		else
+			-- Figure out the side and corner dimensions.
+			local ew, eh = math.max(w - pp.stretchw, 0), math.max(h - pp.stretchh, 0);
+			w, h = math.min(pp.stretchw, w) / 2, math.min(pp.stretchh, h) / 2; 
+			
+			-- Iterate through the table entries. If an entry is a false boolean, disable
+			-- drawing until after a true boolean entry. If drawing is allowed, draw the
+			-- cell indexed by and formatted in the entry.
+			local bDraw = true;
+			for _, item in ipairs{
+				-----------
+				-- Corners
+				-----------
+				{ 1, x, y, w, h },
+				{ 3, x + w + ew, y, w, h },
+				{ 7, x, y + h + eh, w, h },
+				{ 9, x + w + ew, y + h + eh, w, h },
+				
+				------------------------
+				-- Top and bottom sides
+				------------------------
+				ew > 0,
+				{ 2, x + w, y, ew, h },
+				{ 8, x + w, y + h + eh, ew, h },
+
+				------------------------
+				-- Left and right sides
+				------------------------
+				eh > 0,
+				{ 4, x, y + h, w, eh },
+				{ 6, x + w + ew, y + h, w, eh },			
+		
+				----------
+				-- Middle
+				----------
+				ew > 0 and eh > 0,	
+				{ 5, x + w, y + h, ew, eh }
+			} do
+				if type(item) == "boolean" then
+					bDraw = item;
+				elseif bDraw then
+					local index, x, y, w, h = unpack(item);
+					pp.picture[index]:Draw(x, y, w, h, bIgnore);
+				end
+			end
+		end
+	end,
+	
+	-------------------------------------------
+	-- Flips a picture
+	-- pp: Picture property set
+	-- bHorizontal: If true, flip horizontally
+	-- bVertical: If true, flip vertically
+	-------------------------------------------
+	Flip = function(pp, bHorizontal, bVertical)
+		pp.bHorizontal, pp.bVertical = bHorizontal, bVertical;
+	end,
+	
+	----------------------------
+	-- Gets the picture file
+	-- pp: Picture property set
+	-- Returns: Picture file
+	----------------------------
+	GetFile = function(pp)
+		return pp.file;
+	end,
+	
+	--------------------------------------------
+	-- Gets the picture's flip states
+	-- pp: Picture property set
+	-- Returns: Horizontal, vertical flip state
+	--------------------------------------------
+	GetFlips = function(pp)
+		return pp.bHorizontal == true, pp.bVertical == true;
+	end,
+	
+	----------------------------
+	-- Gets the picture grid
+	-- pp: Picture property set
+	-- Returns: Picture grid
+	----------------------------
+	GetGrid = function(pp)
+		if pp:Type() == "Multi" then
+			return pp.picture;
+		end
+	end,
+	
+	----------------------------
+	-- Gets the picture texels
+	-- pp: Picture property set
+	-- Returns: Picture texels
+	----------------------------
+	GetTexels = function(pp)
+		if pp:Type() == "Basic" then
+			return Render.GetPictureTexels(pp.picture);
+		end
+	end,
+	
+	---------------------------------------
+	-- Gets the stretch thresholds
+	-- pp: Picture property set
+	-- Returns: Threshold width and height
+	---------------------------------------
+	GetThresholds = function(pp)
+		if pp:Type() == "Multi" then
+			return pp.stretchw, pp.stretchh;
+		end
+	end,
+
+	---------------------------------------
+	-- Loads the picture data
+	-- pp: Picture property set
+	-- file: Image file
+	-- s1, t1, s2, t2: Picture texels
+	-- Returns: If true, picture is loaded
+	---------------------------------------
+	LoadPicture = function(pp, file, s1, t1, s2, t2)
+		-- Attempt to load the picture.
+		local picture = Render.LoadPicture(file, s1, t1, s2, t2);
+		if picture then
+			pp.file, pp.picture = file, picture;
+			return true;
+		end
+	end,
+	
+	-----------------------------------
+	-- Primes pictures of a given type
+	-- pp: Picture property set
+	-- type: Picture type to prime
+	-----------------------------------
+	Prime = function(pp, type)
+		pp.file = "";
+		if type == "Basic" then
+			pp.picture = nil;
+		else
+			pp.picture, pp.stretchw, pp.stretchh = {}, 1 / 3, 1 / 3;
+			for _ = 1, 9 do
+				table.insert(pp.picture, NewAsset("Picture"));
+			end
+		end
+	end,
+	
+	----------------------------------------------
+	-- Prints the picture data to a stream
+	-- pp: Picture property set
+	-- stream: Stream to which picture is printed
+	-- indent: Indent string
+	----------------------------------------------
+	Print = function(pp, stream, indent)
+		local indent = indent or "";
+		if pp:Type() == "Basic" then
+			stream:write("BasicPicture_Load{\n");
+			stream:write(indent, "\t", string.format("file = %q,\n", pp.file));
+			if pp.file ~= "" then
+				local s1, t1, s2, t2 = pp:GetTexels();
+				stream:write(indent, "\t", "s1 = ", s1, ",\n");
+				stream:write(indent, "\t", "t1 = ", t1, ",\n");
+				stream:write(indent, "\t", "s2 = ", s2, ",\n");
+				stream:write(indent, "\t", "t2 = ", t2, ",\n");
+			end
+			for _, boolean in ipairs{ "bHorizontal", "bVertical" } do
+				stream:write(indent, "\t", boolean, " = ", pp[boolean] and "true" or "false", boolean == "bHorizontal" and ",", "\n");
+			end
+		else
+			stream:write("MultiPicture_Load{\n");
+			for _, stretch in ipairs{ "stretchw", "stretchh" } do
+				stream:write(indent, "\t", stretch, " = ", pp[stretch], ",\n");
+			end
+			for index = 1, 9 do
+				stream:write(indent, "\t");
+				pp.picture[index]:Print(stream, indent .. "\t");
+				stream:write(index < 9 and ",", "\n");
+			end
+		end
+		stream:write(indent, "}");
+	end,
+	
+	------------------------------------
+	-- Sets the picture texels
+	-- pp: Picture property set
+	-- s1, t1, s2, t2: Texels to assign
+	------------------------------------
+	SetTexels = function(pp, s1, t1, s2, t2)
+		if pp:Type() == "Basic" then
+			Render.SetPictureTexels(pp.picture, s1, t1, s2, t2);
+		end
+	end,
+
+	-------------------------------------
+	-- Assigns a stretch threshold
+	-- pp: Picture property set
+	-- threshold: Threshold type
+	-- stretch: Stretch factor to assign
+	-------------------------------------
+	SetThreshold = function(pp, threshold, stretch)
+		if pp:Type() == "Multi" then
+			pp[threshold] = stretch;
+		end
+	end,
+		
+	------------------------------
+	-- Indicates the picture type
+	-- pp: Picture property set
+	-- Returns: Type descriptor
+	------------------------------
+	Type = function(pp)
+		if type(pp.picture) == "table" then
+			return "Multi";
+		else
+			return "Basic";
+		end
+	end
+},
+
+-- New
+-- pp: Picture property set
+----------------------------
+function(pp)
+	pp.file = "";
+end);
+
+-------------------------------------------------
+-- BasicPicture_Load
+-- Loads a basic picture from a data description
+-- data: Picture data
+-- Returns: Instantiated picture
+-------------------------------------------------
+function BasicPicture_Load (data)
+	local picture = NewAsset("Picture");
+		if data.file ~= "" then
+			picture:LoadPicture(data.file, data.s1, data.t1, data.s2, data.t2);
+		end
+		picture:Flip(data.bHorizontal, data.bVertical);	
+	return picture;
+end
+
+-------------------------------------------------
+-- MultiPicture_Load
+-- Loads a multi picture from a data description
+-- data: Picture data
+-- Returns: Instantiated picture
+-------------------------------------------------
+function MultiPicture_Load (data)
+	local picture = NewAsset("Picture");
+		picture:Prime("Multi");
+		picture:SetThreshold("stretchw", data.stretchw);
+		picture:SetThreshold("stretchh", data.stretchh);
+		for index = 1, 9 do
+			picture:GetGrid()[index] = data[index];
+		end
+	return picture;
+end

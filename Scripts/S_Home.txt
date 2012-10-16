@@ -1,0 +1,191 @@
+-- Install the home screen.
+LoadScreen("Home",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Panes = Backdrop(false);
+		s.Type = Combobox(5);	
+		s.U, s.D = ScrollPair(nil, 300);
+		s.Uside, s.Dside = ScrollPair(nil, 100, .025);
+		s.Mode = Radiobox(.1, .9, true);
+		s.Error = Marquee("T24", .05, 50);
+		s.Move = UserW_MovePane();
+		s.User = UserW_UserPane();
+		
+		-- Install the windows.
+		local home, marquee = Popup(), Popup();
+			
+		---------------------------------
+		-- Loading: widget type combobox
+		---------------------------------
+		-- Refresh --
+		s.Type:SetMethod("onRefresh", function(bNew)
+			local component = s.Type:GetHeading().datum;
+			if bNew then
+				-- Install the new component list.
+				component.WidgetList:Dock(home, "Normal", .4, .4, .4, .2);
+				
+				-- Bind the scroll buttons to the new component list. Assign it as the
+				-- current list.
+				s.U:SetTarget(component.WidgetList, true);
+				s.D:SetTarget(component.WidgetList, false);
+				s.WidgetList = component.WidgetList;
+				
+				-- Install the dialog box for the new component if there are entries in the
+				-- list; remove it otherwise.
+				if Range.GetItemCount(s.WidgetList.N) > 0 then
+					local dialog = component.Dialog;
+					dialog:Dock(s.Panes, "Normal", dialog.load.x, dialog.load.y, dialog.load.w, dialog.load.h);
+				else
+					Widget.Unload(component.Dialog.N);
+				end
+			else
+				-- Unload the old component list.
+				if s.WidgetList then
+					Widget.Unload(s.WidgetList.N);
+				end
+				
+				-- Remove the dialog box for the old component.
+				Widget.Unload(component.Dialog.N);
+			end
+		end);
+		for _, name in ipairs{ "Popup",
+							   "Checkbox", "PushButton", "ScrollButton", "StaticText",
+							   "Combobox", "EditboxBasic", "ListboxBasic",	"Radiobox",
+							   "SliderHorz"
+		} do
+			local type = W_Type(name);
+			type.WidgetList, type.Dialog = ListboxBasic(3), TypeDialog(name);
+			s.Type:Append(name, type);
+		end
+		
+		--------------------------
+		-- Loading: mode radiobox
+		--------------------------
+		for index = 1, 4 do
+			s.Mode:AddOption(.25 * index - .125, .5);
+		end
+								
+		-- Refresh --
+		s.Mode:SetMethod("onRefresh", function(bNew)
+			if bNew then
+				local modes = { "N", "S", "F", "D" };
+				Mode = modes[s.Mode:GetChoice() + 1];
+			end
+		end);
+		
+		------------------------
+		-- Docking: home window
+		------------------------
+		HelpText("User Widgets", "Buttons_UserWidgets", true, "T18", .05):Dock(home, "Normal", .05, .25, .75, .1);
+		local row = SpacedRow(.05, .05, .1, .3, .1);
+			HelpText("Type", "Combobox_Type", true, "T18", .05):Dock(home, "Normal", row());
+			s.Type:Dock(home, "Normal", row(.1));
+		local col = SpacedColumn(0, .825, .4, .1, .1);
+			s.U:Dock(home, "Normal", col());
+			s.D:Dock(home, "Normal", col());
+		local col = SpacedColumn(0, 0, .4, .35, .1);
+			PushButton("New", function()
+				local wp = s.Type:GetHeading().datum.UserNew();
+				wp:Dock(s.User, "Normal", 0, 0, .3, .2);
+				Widget.SetTag(wp.N, UserW_NewID());
+				s.WidgetList:Append(function()
+					return Widget.GetTag(wp.N);
+				end, wp);
+				s.Type:Call("onRefresh", true);
+				Save = true;
+			end):Dock(home, "Normal", col());
+			PushButton("Delete", function()
+				local selection = s.WidgetList:GetSelection();
+				if selection then
+					selection.datum:Free();
+					s.WidgetList:Remove(s.WidgetList:Selection());
+					s.Type:Call("onRefresh", true);
+					Save = true;
+				end
+			end):Dock(home, "Normal", col());
+			PushButton("Scene", function()
+				Dialog("Scene");						
+			end):Dock(home, "Normal", col());
+		local col = SpacedColumn(.3, .8, .2, .1, .1);
+			ScrollButton(s.Type, true, 300):Dock(home, "Normal", col());
+			ScrollButton(s.Type, false, 300):Dock(home, "Normal", col());
+		PushButton("Quit", function()
+			ConditionQuery("Some changes are unsaved. Quit anyway?",
+			function()
+				return Save;
+			end,
+			function()
+				Quit = true;
+			end);
+		end):Dock(home, "Normal", 0, .85, .35, .1);
+		HelpText("Mode", "Button_WidgetMode", true, "T18", .05):Dock(home, "Normal", .05, .75, .3, .075);
+		local row = SpacedRow(0, .4375, .65, .1, .1);
+		for _, mode in ipairs{ "N", "S", "F", "D" } do
+			StaticText(mode, false, "T18", 0):Dock(home, "Normal", row());
+		end
+		s.Mode:Dock(home, "Normal", .4, .75, .4, .075);		
+		
+		---------------------------
+		-- Docking: marquee window
+		---------------------------	
+		s.Error:Dock(marquee, "Normal", .1, .05, .8, .9);
+		
+		------------------
+		-- Docking: layer
+		------------------
+		home:Dock(s.Panes, "Normal", 0, 0, .5, .7);
+		marquee:Dock(s.Panes, "Normal", 0, 0, .5, .1);
+		s.Uside:Dock(s.Panes, "Normal", .5, .1, .1, .1);
+		s.Dside:Dock(s.Panes, "Normal", .5, .8, .1, .1);
+				
+		------------------------
+		-- Loading: home window
+		------------------------
+		home:SnapPane(marquee, 0, 0);
+		home:Bubble();
+		home.Scroll = function(wp, bUp, count)
+			local y, h = wp:GetRect("yh");
+			y = bUp and math.max(0, y - count) or y + count;
+			wp:SetRect("y", y);
+			wp:Adjust(y, h);
+		end
+		s.Uside:SetTarget(home, true);
+		s.Dside:SetTarget(home, false);
+				
+		-------------------------------------------
+		-- ClearScene
+		-- Removes all user widgets from the scene
+		-------------------------------------------
+        function ClearScene()
+    		for _, component in s.Type:Iter() do
+    			-- Remove all components. If any components exist, indicate that there are
+    			-- unsaved changes.
+    			for _, widget in component.datum.WidgetList:Iter() do
+    				widget.datum:Free();
+    				Save = true;
+    			end
+    			component.datum.WidgetList:Clear();
+    		end
+    	end
+
+    	-------------------------------------------
+		-- Message
+		-- Prints a message in the message marquee
+		-- message: Message to display
+		-- bLoop: Looping boolean
+		-------------------------------------------
+		function Message (message, bLoop)
+			s.Error:SetString(message, bLoop);
+		end
+	end,
+	
+	-- Entry --
+	function(s)
+		for _, value in ipairs{ "User", "Move", "Panes" } do
+			s[value]:Frame(0, 0, 1, 1);
+		end
+	end
+);

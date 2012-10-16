@@ -1,0 +1,216 @@
+-----------------------------
+-- Condition and task tables
+-----------------------------
+local _Condition, _Task = {}, {};
+
+-----------------------
+-- GetKeyAction
+-- Gets a key action
+-- key: Key data
+-- Returns: Key action
+-----------------------
+local function GetKeyAction (key)
+	-- If a control key is pressed, indicate any accelerator action.
+	if Misc.And(key.mod, SDL.KMOD_CTRL) ~= 0 then
+		if key.sym == SDL.K_c then
+			return "copy";
+		elseif key.sym == SDL.K_x then
+			return "cut";
+		elseif key.sym == SDL.K_v then
+			return "paste";
+		end
+	end
+	
+	-- Handle basic actions, if possible.
+	for _, action in ipairs{ "backspace", "delete", "left", "right", "up", "down", "tab", "escape" } do
+		if SDL["K_" .. string.upper(action)] == key.sym then
+			return action;
+		end
+	end
+
+	-- If letter keys are pressed, perform capitalization according to the state of the
+	-- Shift and Caps Lock modifiers: on a match, use lowercase; otherwise uppercase.
+	if key.sym >= SDL.K_a and key.sym <= SDL.K_z then
+		local char, state = string.char(key.sym), Misc.And(key.mod, SDL.KMOD_SHIFT) ~= 0;
+		return Misc.Test(key.mod, SDL.KMOD_CAPS) ~= state and string.upper(char) or char;
+		
+	-- In the case of other valid keys, supply the corresponding character.
+	elseif key.sym >= SDL.K_0 and key.sym <= SDL.K_9 or key.sym == SDL.K_SPACE then
+		return string.char(key.sym);
+	end
+	
+	-- If all else fails, return the key.
+	return key;
+end
+
+--------------------------------------------
+-- Pass
+-- Builds an iterator over the input passes
+-- Returns: Iterator which returns true
+--------------------------------------------
+local function Pass ()
+	return coroutine.wrap(function()
+		local s = Section("Home");
+		
+		-- In drag-and-drop mode, run a pass to get a move widget if none exists.
+		if Mode == "D" and not s.Move.widget then
+			coroutine.yield(true);
+		end
+		
+		-- If there is a move widget, run a pass to get the move dock.
+		if s.Move.widget then
+			Widget.AllowDockSignalTest(s.Panes.N, false);
+			s.Move.dock = nil;
+			coroutine.yield(true);
+			Widget.AllowDockSignalTest(s.Panes.N, true);
+		end
+		
+		-- Run the normal pass, enabling the move pane if there is a move widget.
+		s.Move.bOn = s.Move.widget and true;
+		coroutine.yield(true);
+		s.Move.bOn = false;
+	end);
+end
+
+------------------------------
+-- RunTasks
+-- Performs all pending tasks
+------------------------------
+local function RunTasks ()
+	-- Iterate until only persistent tasks remain.
+	local persist, sleep = 0, {};
+	while persist ~= table.getn(_Task) do
+		-- Create an empty cache for this pass, and store the task list. The current task
+		-- list is emptied, allowing it to be filled during this run.
+		local cache, live = {}, _Task;
+		_Task = {};
+
+		-- Invoke all live tasks; ignore sleeping tasks. If a task is to be kept, increment
+		-- the persistent task count and put it to sleep.
+		for _, task in ipairs(live) do
+			if not sleep[task] and task() then
+				persist = persist + 1;
+				sleep[task] = true;
+			end
+			
+			-- Keep sleeping tasks alive.
+			if sleep[task] then
+				table.insert(cache, task);
+			end
+		end
+		
+		-- Put any new tasks into the cache. Replace the task list with the cache.
+		for _, task in ipairs(_Task) do
+			table.insert(cache, task);
+		end
+		_Task = cache;
+	end
+end
+
+-----------------------------------------
+-- RunTraps
+-- Runs pending events through any traps
+-----------------------------------------
+local function RunTraps ()
+	-- Process all events through the top-level traps.
+	while SDL.PollEvent(SDL._Event) ~= 0 do
+		local type = SDL._Event.type;
+		
+		-- Check for key-related events.
+		if type == SDL.KEYDOWN or type == SDL.KEYUP then
+			-- Trap the key action.
+			CurrentSection:KeyTrap(GetKeyAction(SDL._Event.key.keysym), type == SDL.KEYDOWN);
+		end
+	end
+end
+
+------------------------------------
+-- AddTask
+-- Adds a new task to the task list
+-- task: Task to add
+------------------------------------
+function AddTask (task)
+	table.insert(_Task, task);
+end
+
+------------------------------------------------
+-- AddConditionalTask
+-- Adds a new conditional task to the task list
+-- task: Routine to invoke from task
+-- condition: Condition task depends on
+------------------------------------------------
+function AddConditionalTask (task, condition)
+	AddTask(function()
+		-- Invoke a ready routine. If waiting, go to the next task; discard otherwise.
+		if _Condition[condition] == "D" then
+			return task();
+		elseif _Condition[condition] == "W" then
+			return true;
+		end
+	end);
+end
+
+---------------------------------------------------
+-- ConditionQuery
+-- Provides an interactive query on a condition
+-- message: Message to display on query
+-- test: If routine returns true, invoke the query
+-- body: Body of logic to process on success
+---------------------------------------------------
+function ConditionQuery (message, test, body)
+	local condition = {};
+	SetCondition(condition);
+	AddConditionalTask(body, condition);
+	if test() then
+		Dialog("OKCancel", message, condition);    
+	end
+end
+
+------------------------------------
+-- PauseCondition
+-- Puts a condition in a wait state
+-- condition: Condition to pause
+------------------------------------
+function PauseCondition (condition)
+	_Condition[condition] = "W";
+end
+
+-------------------------------
+-- SetCondition
+-- Make a condition ready
+-- condition: Condition to set
+-------------------------------
+function SetCondition (condition)
+	_Condition[condition] = "D";
+end
+
+------------------------------------
+-- StopCondition
+-- Puts a condition in a stop state
+-- condition: Condition to stop
+------------------------------------
+function StopCondition (condition)
+	_Condition[condition] = nil;
+end
+
+------------------------------------
+-- UpdateInput
+-- Updates the editor's input state
+------------------------------------
+function UpdateInput ()
+	-- Trap pending events. Process the resulting tasks.
+	RunTraps();
+	RunTasks();
+	
+	-- Get the current mouse state and update the cursor. 
+	local buttons, x, y = SDL.GetMouseState(0, 0);
+	local w, h = Render.GetVideoSize();
+	
+	-- Propagate the mouse state and cursor through the UI, processing the resulting tasks
+	-- on each pass.
+	cx, cy =  x / w, y / h;
+	for _ in Pass() do
+		UI.PropagateSignal(Misc.Test(buttons, SDL.BUTTON_LMASK));
+		RunTasks();
+	end
+end

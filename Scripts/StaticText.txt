@@ -1,0 +1,91 @@
+-------------------------------------
+-- StaticText
+-- Static text setup procedure
+-- string: String to assign to text
+-- bFrame: Frame boolean
+-- textset: Text set to use
+-- offset: Text offset
+-- Returns: Static text property set
+-------------------------------------
+function StaticText (string, bFrame, textset, offset)
+	local wp = W_New("StaticText", bFrame);
+		wp:SetText(textset, offset);
+		wp:SetString(string);
+	return wp;
+end
+
+--------------------------------------------------------
+-- Table with static text methods; inherits from widget
+--------------------------------------------------------
+W_Inherit("StaticText", {	
+	--------------------------------
+	-- Deletes the user static text
+	-- wp: Widget property set
+	--------------------------------
+	Delete = function(wp)
+	
+	end,
+	
+	------------------------------------
+	-- Loads the static text dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	------------------------------------
+	Dialog = function(dp, widgets)
+		-------------------------------
+		-- Loading: static text dialog
+		-------------------------------
+		dp:SetString("Static Text Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+		
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+
+	-------------------------------
+	-- Generates a new static text
+	-- wp: Widget property set
+	-- bFrame: Frame boolean
+	-------------------------------
+	New = function(wp, bFrame)
+		wp.bFrame = bFrame;
+	
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:VertCString(x, y, w, h);
+				
+			-- If requested, frame the text.
+			if wp.bFrame then
+				Render.DrawBox(x, y, w, h, 1, 1, 1);
+			end
+		end);	
+	end,
+	
+	--------------------------------------------------
+	-- Prints the static text data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which static text is printed
+	-- indent: Indent string
+	--------------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("StaticText", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+		
+	-------------------------------------
+	-- Generates a new user static text
+	-- Returns: Static text property set
+	-------------------------------------
+	UserNew = function()
+		return UserW_Widget("StaticText", false);
+	end
+}, "Widget");

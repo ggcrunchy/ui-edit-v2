@@ -1,0 +1,112 @@
+-- Install the grid dialog.
+LoadDialog("Grid",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("Grid Features", .15, true);			
+		s.Grid = Checkbox();
+		for _, value in ipairs{ "xCuts", "yCuts" } do
+			s[value] = EditboxBasic("0", "T18", FilterUnsigned(100), 300, 250);
+		end
+		for _, value in ipairs{ "P1", "P2" } do
+			s[value] = Radiobox(.3, .3, true);
+		end
+
+		---------------------------------
+		-- Loading: grid snap radioboxes
+		---------------------------------
+		for _, value in ipairs{ "P1", "P2" } do
+			for index = 1, 4 do
+				s[value]:AddOption((index == 1 or index == 3) and .275 or .725, index < 3 and .275 or .725);
+			end
+		end
+
+		-----------
+		-- Docking
+		-----------
+		OK(s):Dock(s.Pane, "Body", .05, .85, .2, .1);
+		local col = SpacedColumn(.05, .1, .1, .075, .1);
+			local row = SpacedRow(.05, col());
+				s.Grid:Dock(s.Pane, "Body", row());
+				HelpText("Enable Grid", "Checkbox_Grid", true, "T18", .05):Dock(s.Pane, "Body", row(.3));
+		for _, value in ipairs{ "xCuts", "yCuts" } do
+			local row, key = SpacedRow(.05, col()), value;
+				StaticText(value, false, "T18", 0):Dock(s.Pane, "Body", row(.025));
+				s[value]:Dock(s.Pane, "Body", row());
+				PushButton("-", function()
+					local cuts = s.wp:GetGridCuts(key);
+					if cuts ~= 0 then
+						s[key]:SetString(cuts - 1);
+					end
+				end):Dock(s.Pane, "Body", row());
+				PushButton("+", function()
+					s[key]:SetString(s.wp:GetGridCuts(key) + 1);
+				end):Dock(s.Pane, "Body", row());
+		end
+		local col = SpacedColumn(.05, .65, .25, .05, .2);
+		for _, value in ipairs{ "P1", "P2" } do
+			local row = SpacedRow(.05, col());
+				StaticText(value, false, "T18", 0):Dock(s.Pane, "Body", row());
+				s[value]:Dock(s.Pane, "Body", row(.15));
+		end
+		HelpText("Snap", "Radiobox_Snap", true, "T18", .05):Dock(s.Pane, "Body", .65, .1, .3, .1);
+		
+		------------------------
+		-- Loading: focus chain
+		------------------------
+		s:LoadFocusChain(s.xCuts, s.yCuts);
+	end,
+	
+	-- Entry
+	-- wp: Widget property set
+	---------------------------
+	function(s, wp)
+		s.Pane:Frame(0, 0, .5, .5);
+		
+		-- Configure the grid properties.
+		s.Grid:SetCheck(wp:GetGridOn());
+		for _, value in ipairs{ "xCuts", "yCuts" } do
+			s[value]:SetString(wp:GetGridCuts(value));
+		end
+		for _, value in ipairs{ "P1", "P2" } do
+			local type = wp:GetSnapType(value == "P2");
+			for index, corner in ipairs{ "UL", "UR", "LL", "LR" } do
+				if corner == type then
+					s[value]:SetChoice(index - 1);
+					break;
+				end
+			end
+		end
+		
+		-- Override the current widget methods.
+		wp.GetGridOn = function(wp)
+			return s.Grid:GetCheck();
+		end
+		wp.GetGridCuts = function(wp, cut)
+			-- Try to convert the current editbox string into a number. If this is not
+			-- possible, reset it to 0. Clamp the number within an acceptable range.
+			return ClampIn(tonumber(s[cut]:GetString()) or 0, 0, 100);
+		end
+		wp.GetSnapType = function(wp, bSecond)
+			local type = { "UL", "UR", "LL", "LR" };
+			return type[s[bSecond and "P2" or "P1"]:GetChoice() + 1];
+		end
+		s.wp = wp;
+	end,
+	
+	-- Close --
+	function(s, bCancel)
+		-- Configure the widget.
+		s.wp:SetGridOn(s.wp:GetGridOn());
+		for _, value in ipairs{ "xCuts", "yCuts" } do
+			s.wp:SetGridCuts(value, s.wp:GetGridCuts(value));
+		end
+		s.wp:SetSnapType(s.wp:GetSnapType(true), true);
+		s.wp:SetSnapType(s.wp:GetSnapType(false), false);
+		
+		-- Restore the old widget methods.
+		s.wp.GetGridOn, s.wp.GetGridCuts, s.wp.GetSnapType = nil, nil, nil;
+	end
+);

@@ -1,0 +1,78 @@
+-- Install the help dialog.
+LoadDialog("Help",
+	-- Load --
+	function(s)
+		----------------
+		-- Installation
+		----------------
+		s.Pane = Title("", 0, true);
+		s.OK = OK(s);
+		s.Message = W_Prime("Widget");
+		s.U, s.D = ScrollPair(s.Message, 300);
+
+		----------------------------
+		-- Loading: message display
+		----------------------------	
+		-- Update --
+		s.Message:SetMethod("u", function(x, y, w, h)
+			local textset, offset = s.Message:GetText();
+			
+			-- Divide the space up into equal-sized lines, then go down through them
+			-- rendering out the text.
+			h = h / s.linemax;
+			for index = s.line, math.min(s.line + s.linemax - 1, table.getn(s.entry)) do
+				textset:DrawString(s.entry[index], x + offset, y);
+				y = y + h;				
+			end
+		end);
+		s.Message:SetText("T24", .05);
+		
+		-- Scroll --
+		s.Message.Scroll = function(wp, bUp, count)
+			if bUp then
+				s.line = math.max(s.line - 1, 1);
+			else
+				s.line = math.min(s.line + 1, table.getn(s.entry));
+			end
+		end		
+	end,
+	
+	-- Entry
+	-- entry: Help entry
+	---------------------
+	function(s, entry)	
+		-- Assign the help entry to the button. Set the title.
+		s.entry = entry;
+		s.Pane:SetString(s.entry.title);
+		
+		-- Find the width of the longest text line. Get the line count.
+		local maxw, textset, offset = 0, s.Message:GetText();
+		for _, line in ipairs(s.entry) do
+			local w = textset:GetWidth(line, 1, string.len(line));
+			if w > maxw then
+				maxw = w;
+			end
+		end
+		s.line, s.linemax = 1, math.min(table.getn(s.entry), 8);
+		
+		-- If necessary, widen the pane so that it accomodates the OK button. The per-line
+		-- text height is constant, as are the dimensions of the OK button. The pane is set
+		-- up to reflect these.
+		local w, h = ClampIn(maxw + offset + .1, .3, 1), s.linemax + 1;
+		local iw, ih = 1 / w, 1 / h;
+			s.Message:Dock(s.Pane, "Body", 0, 0, .85 * iw, (h - 1) * ih);
+			s.OK:Dock(s.Pane, "Body", 0, (h - 1) * ih, .15 * iw, ih);
+			local col = SpacedColumn((h - 1.75) * ih, .85, 0, .0625 * iw, .75 * ih);
+				s.U:Dock(s.Pane, "Body", col());
+				s.D:Dock(s.Pane, "Body", col());
+
+		-- Reload the pane, adjusting its title.
+		local h = math.max(.1 * h, .3);
+		s.Pane:Frame(0, 0, w, h);
+			s.Pane:SetTitleHeight(.1 / h);
+	end,
+	
+	 -- Close --
+	function(s, bCancel)
+	end
+);

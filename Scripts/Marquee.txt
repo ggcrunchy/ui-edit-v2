@@ -1,0 +1,73 @@
+---------------------------------
+-- Marquee
+-- Marquee setup procedure
+-- textset: Text set to use
+-- offset: Text offset
+-- timeout: Text scroll timeout
+-- Returns: Marquee property set
+---------------------------------
+function Marquee (textset, offset, timeout)
+	local wp = W_New("Marquee", timeout);
+		wp.offset = 0;
+		wp:SetPicture("B", GetAsset("Picture", "blue"));
+		wp:SetText(textset, offset);
+	return wp;
+end
+
+---------------------------------------------------
+-- Table with marquee methods; inherits from range
+---------------------------------------------------
+W_Inherit("Marquee", {
+	--------------------------------
+	-- Generates a new marquee
+	-- wp: Widget property set
+	-- timeout: Text scroll timeout
+	--------------------------------
+	New = function(wp, timeout)
+		wp.counter = NewAsset("Timer", function()
+			if wp.offset + 1 < Range.GetItemCount(wp.N) then
+				wp.offset = wp.offset + 1;
+			elseif wp.bLoop then
+				wp.offset = 0;
+			else
+				wp:SetString("", false);
+			end			
+		end, timeout);
+	
+		-- Signal --
+		wp:SetMethod("s", wp:ST_Basic());
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:DrawPicture("B", x, y, w, h);
+			
+			-- If the string is not empty, proceed to draw it.
+			local itemcount = Range.GetItemCount(wp.N);
+			if itemcount ~= 0 then
+				wp:GetText():DrawString(wp:GetSubstr(wp.offset, itemcount), x, y);
+			end
+			wp.counter:Update();
+			
+			-- Frame the marquee.
+			Render.DrawBox(x, y, w, h, 1, 1, 1);
+		end);
+	end,
+	
+	---------------------------
+	-- Sets the marquee string
+	-- wp: Widget property set
+	-- text: Text string
+	-- bLoop: Loop boolean
+	---------------------------
+	SetString = function(wp, text, bLoop)
+		-- Pad the string with spaces.
+		text = string.rep(" ", math.ceil(wp:GetRect("w") / wp:GetText():GetWidth(" ", 1, 1))) .. text;
+		
+		-- Add the string.
+		Range.DeleteItems(wp.N, 0, Range.GetItemCount(wp.N));
+		wp:InsertString(0, text);
+		
+		-- Reset the marquee and flag the looping.
+		wp.bLoop, wp.offset = bLoop, 0;
+	end
+}, "Range");

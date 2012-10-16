@@ -1,0 +1,44 @@
+--------------------------------------------------
+-- Table with range methods; inherits from widget
+--------------------------------------------------
+W_Inherit("Range", {
+	-------------------------------------
+	-- Insert a string into the range
+	-- wp: Widget property set
+	-- offset: Offset at which to assign
+	-- text: Text to assign
+	-------------------------------------
+	InsertString = function(wp, offset, text)
+		-- Insert items equal to the length, and assign the string bytes as contexts.
+		Range.InsertItems(wp.N, offset, string.len(text));
+		for index = offset + 1, offset + string.len(text) do
+			Range.SetItemContext(wp.N, index - 1, string.byte(text, index - offset));
+		end
+	end,
+	
+	-----------------------------------
+	-- Gets a substring from the range
+	-- wp: Widget property set
+	-- offset: Offset into string
+	-- last: End of string
+	-- Returns: The range string
+	-----------------------------------
+	GetSubstr = function(wp, offset, last)
+		-- Build up the string from the range's item contexts.
+		local chars = {};
+		for index = offset + 1, last do
+			table.insert(chars, Range.GetItemContext(wp.N, index - 1));
+		end
+		return string.char(unpack(chars));
+	end,	
+	
+	_Type = "Range"
+}, "Widget");
+
+-- Load the range types.
+return Load{
+	"Textlist.txt",
+	"EditboxBasic.txt",
+	"Marquee.txt",
+	"Radiobox.txt"
+};

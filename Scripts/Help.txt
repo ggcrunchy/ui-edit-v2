@@ -1,0 +1,118 @@
+-------------
+-- Help text
+-------------
+local _Help = {
+	------------------------------------
+	-- Text for the user widget buttons
+	------------------------------------
+	Buttons_UserWidgets = {
+		title = "Widget Management",
+		
+		"The 'New' button creates a new widget of",
+		"the current component type, and places",
+		"it in the upper-left corner on the bottom",
+		"pane(this is considered to be a pre-existing",
+		"user pane). The 'Delete' button deletes the",
+		"selected widget of the current component",
+		"type, if it exists."
+	},
+	
+	-----------------------------------
+	-- Text for the widget mode button
+	-----------------------------------
+	Button_WidgetMode = {
+		title = "Widget Mode",
+		
+		"The mode used to interact with widgets.",
+		"In 'N' mode, user widgets react normally",
+		"to user input. In 'S' mode, clicking on",
+		"a user pane sets the widget there, if",
+		"possible. In 'F' mode, the widget is",
+		"placed and formed by dragging over a",
+		"user pane. In 'D' mode, the widget is",
+		"placed by grabbing it and dragging to",
+		"a desired spot."
+	},
+	
+	------------------------------
+	-- Text for the type combobox
+	------------------------------
+	Combobox_Type = {
+		title = "Component Type",
+		
+		"The current component type."
+	},
+	
+	------------------------------
+	-- Text for the grid checkbox
+	------------------------------
+	Checkbox_Grid = {
+		title = "Grid Management",
+		
+		"Enables or disables the grid used to",
+		"align widgets and some of their parts.",
+		"The grid is horizontally and vertically",
+		"partitioned xCuts and yCuts times,",
+		"respectively. Points will be snapped",
+		"to one of the four corners, as desired."
+	},
+	
+	------------------------------
+	-- Text for the snap radiobox
+	------------------------------
+	Radiobox_Snap = {
+		title = "Grid Snapping",
+		
+		"Determines which corner a point will snap",
+		"to when the grid is activated. The point",
+		"will be snapped to the cell corner that",
+		"corresponds to the cell on this radiobox.",
+		"'P1' indicates the point used in most cases;",
+		"'P2' is the second corner, used in 'F' mode."
+	},
+	
+	-------------------------
+	-- Picture configuration
+	-------------------------
+	Picture_Config = {
+		title = "Picture Configuration",
+		
+		""
+	}
+};
+
+------------------------------------
+-- HelpText
+-- Help text setup procedure
+-- string: String to assign to text
+-- entry: Help entry
+-- bFrame: Frame boolean
+-- textset: Text set to use
+-- offset: Text offset
+-- Returns: Help text property set
+------------------------------------
+function HelpText (string, entry, bFrame, textset, offset)
+	local wp = W_New("StaticText", bFrame);
+		wp:SetText(textset, offset);
+		wp:SetString(string);
+				
+		-- Post Event --
+		wp:EmbedMethod("e", nil, function(event)
+			-- Turn the cursor into a question mark while hovering over the help text, and
+			-- open a help dialog if the text is clicked.
+			if event == Widget.WidgetEnter then
+				SetCursor("qm");
+			elseif event == Widget.WidgetLeave and not Widget.IsGrabbed(wp.N) then
+				SetCursor("std");
+			elseif event == Widget.WidgetDrop then
+				if Widget.IsEntered(wp.N) then
+					Dialog("Help", _Help[entry]);
+				end
+				SetCursor("std");
+			end
+		end);
+		
+		-- Post Signal --
+		wp:EmbedMethod("s", nil, wp:ST_Basic());
+	return wp;
+end

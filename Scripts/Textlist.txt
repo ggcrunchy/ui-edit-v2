@@ -1,0 +1,111 @@
+-----------------------------------------------------
+-- Table with textlist methods; inherits from widget
+-----------------------------------------------------
+W_Inherit("Textlist", {	
+	-----------------------------------
+	-- Adds an entry to the textlist
+	-- wp: Widget property set
+	-- entry: Index of entry
+	-- text: Text to assign
+	-- datum: Datum to attach to entry
+	-----------------------------------
+	AddEntry = function(wp, entry, text, datum)
+		-- Get a lookup context. This will be the size of the data array if no free entries
+		-- exist. Otherwise, it will be the first free entry index.
+		local bFree, size = table.getn(wp.array.free) > 0, table.getn(wp.array);
+		local context = bFree and table.remove(wp.array.free) or size + 1;
+		
+		-- Store the lookup context in the textlist.
+		Range.InsertItems(wp.N, entry, 1);
+		Range.SetItemContext(wp.N, entry, context);
+		
+		-- Put the entry in the data array.
+		wp.array[context] = { text = text, datum = datum };
+		table.setn(wp.array, bFree and size or size + 1);
+	end,
+	
+	-------------------------------------
+	-- Gets an entry from the textlist
+	-- wp: Widget property set
+	-- entry: Index of entry
+	-- Returns: The textlist table entry
+	-------------------------------------
+	GetEntry = function(wp, entry)
+		return wp.array[Range.GetItemContext(wp.N, entry)];
+	end,
+	
+	---------------------------------------------------
+	-- Builds an iterator over the textlist
+	-- wp: Widget property set
+	-- start: Start index; if nil, start at 0
+	-- count: Range count; if nil, use item count
+	-- Returns: Iterator which returns index and entry
+	---------------------------------------------------
+	Iter = function(wp, start, count)
+		local itemcount = Range.GetItemCount(wp.N);
+		start, count = start or 0, count or itemcount;
+		local final = start + count;
+		if final > itemcount then
+			final = itemcount;
+		end
+		return function(_, index)
+			if index + 1 < final then
+				return index + 1, wp:GetEntry(index + 1);
+			end
+		end, nil, start - 1;
+	end,
+
+	--------------------------------------
+	-- Removes an entry from the textlist
+	-- wp: Widget property set
+	-- entry: Entry to remove
+	--------------------------------------
+	RemoveEntry = function(wp, entry)
+		-- Put the lookup context into the free entries.
+		local context = Range.GetItemContext(wp.N, entry);
+		table.insert(wp.array.free, context);
+		
+		-- Remove the item from the textlist.
+		Range.DeleteItems(wp.N, entry, 1);
+		
+		-- Nullify the data array entry.
+		wp.array[context] = nil;
+	end,
+	
+	-----------------------------------
+	-- Scrolls a textlist
+	-- wp: Widget property set
+	-- bUp: Up scroll boolean
+	-- count: Count of units to scroll
+	-----------------------------------
+	Scroll = function(wp, bUp, count)
+		local itemcount, offset = Range.GetItemCount(wp.N), Spot.Get(wp.offset) or 0;
+		if bUp then
+			if offset < count then
+				count = offset;
+			end
+		else
+			if offset + count >= itemcount then
+				count = itemcount - offset - 1;
+			end
+		end
+		Spot.Set(wp.offset, bUp and offset - count or offset + count);
+	end,
+	
+	-------------------------------------------------------
+	-- Builds an iterator over a textlist's viewable items
+	-- wp: Widget property set
+	-- Returns: Iterator which returns index and entry
+	-------------------------------------------------------
+	View = function(wp)
+		return wp:Iter(Spot.Get(wp.offset), wp.capacity);
+	end,
+	
+	_Type = "Range"
+}, "Widget");
+
+-- Load the textlist types.
+return Load{
+	"Combobox.txt",
+	"ListboxBasic.txt"
+};

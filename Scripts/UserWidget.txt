@@ -1,0 +1,308 @@
+-------------------------------------
+-- UserW_SetMoveWidget
+-- Loads a widget into the move pane
+-- wp: Widget property set
+-------------------------------------
+local function UserW_SetMoveWidget (wp)
+	if wp == Section("Home").User then
+		return;
+	end
+	
+	-- Store the widget with the move pane.
+	local move = Section("Home").Move;
+	move.widget = wp;
+	
+	-- Abort signal tests. The move pane will be signaled on a following pass.
+	UI.AbortSignalTests();
+	
+	-- Install a task to assign the move widget. Cache the widget's current pane, 
+	-- coordinates, and dimensions in order to restore it on a bad move.
+	wp.op, wp.ox, wp.oy, wp.ow, wp.oh = Widget.GetParent(wp.N), wp:GetRect("xywh");
+	
+	-- Form the move pane from the widget coordinates and dimensions.
+	move:SetRect("xywh", wp.ox, wp.oy, wp.ow, wp.oh);
+	
+	-- Unload the widget to hide it from view.
+	Widget.Unload(wp.N);
+end
+
+---------------------------------------------
+-- UserW_GetMoveWidget
+-- Gets the widget loaded into the move pane
+-- Returns: Widget property set
+---------------------------------------------
+local function UserW_GetMoveWidget ()
+	return Section("Home").Move.widget;
+end
+
+--------------------------------------------------
+-- UserW_SetMoveDock
+-- Sets the pane in which to dock the move widget
+-- wp: Widget property set
+--------------------------------------------------
+local function UserW_SetMoveDock (wp)
+	-- Store the widget with the move pane.
+	Section("Home").Move.dock = wp;
+	
+	-- Abort signal tests; the move dock is set up to be signaled on a following pass.
+	UI.AbortSignalTests();
+end
+
+----------------------------------------------------
+-- UserW_GetMoveDock
+-- Gets the pane in which the move widget will dock
+-- Returns: Pane property set
+----------------------------------------------------
+local function UserW_GetMoveDock ()
+	return Section("Home").Move.dock;
+end
+
+----------------------------
+-- UserW_NewID
+-- Gets the first free ID
+-- Returns: A new ID to use
+----------------------------
+function UserW_NewID ()
+	-- Iterate through the component list and make a list of used IDs.
+	local s, used = Section("Home"), {};
+	for _, entry in s.WidgetList:Iter() do
+		used[entry.text()] = true; 
+	end
+	
+	-- Iterate through the indices from 1 to the count, building IDs by combining the
+	-- component type and index. If an ID is free, return it.
+	local type = s.Type:GetHeading().text;
+	for index = 1, Range.GetItemCount(s.WidgetList.N) do
+		local id = type .. index;
+		if not used[id] then
+			return id;
+		end
+	end
+	
+	-- If all previous tries were taken, the "n + 1" ID will be free.
+	return type .. Range.GetItemCount(s.WidgetList.N) + 1;
+end
+
+--------------------------------
+-- UserW_Current
+-- Gets the current user widget
+-- Returns: Widget property set
+--------------------------------
+function UserW_Current ()
+	local widgets = Section("Home").WidgetList;
+	if widgets then
+		local selection = widgets:GetSelection();
+		if selection then
+			return selection.datum;
+		end
+	end
+end
+
+------------------------------
+-- UserW_Pane
+-- Builds a user pane
+-- component: Component type
+-- arg: Arguments to builder
+-- Returns: Pane property set
+------------------------------
+function UserW_Pane (component, ...)
+	local wp = W_New(component, unpack(arg));
+		-- Event Filter --
+		wp:EmbedMethod("e", function(event)
+			-- In normal mode, trivially pass the filter. Other modes require a current
+			-- widget, so quit if one does not exist.
+			local current = UserW_Current();
+			if Mode == "N" or not current then
+				return Mode == "N";
+			end
+			
+			-- Snap the first point to the grid for grabs.
+			local sx, sy = wp:Snap(cx, cy, false);
+			
+			-- In set mode, dock the current widget on the pane.
+			if Mode == "S" then
+				if event == Widget.WidgetGrab and wp ~= current then
+					local w, h = current:GetRect("wh");
+					if not BoxInBox(sx, sy, w, h, wp:GetRect("xywh")) then
+						Message("Widget will not fit on pane.", false);
+					else
+						current:Dock(wp, "Global", sx, sy, w, h);
+					end
+				end
+				
+			-- In form mode, create a single-pixel rectangle on grabs, and unload the
+			-- current widget to hide it from view; on drops, snap the second point to the
+			-- grid and dock the current widget in the pane, using the rectangle as its
+			-- form. On upkeep, update the form rectangle.
+			elseif Mode == "F" then
+				if event == Widget.WidgetGrab and wp ~= current then
+					wp.outline = { x1 = sx, y1 = sy, x2 = sx, y2 = sy };
+					Widget.Unload(current.N);
+				elseif event == Widget.WidgetDrop then
+					current:Dock(wp, "Global", Rect(wp.outline.x1, wp.outline.y1, wp:Snap(cx, cy, true)));
+					wp.outline = nil;
+				elseif event == Widget.WidgetPreUpkeep then
+					if wp.outline then
+						wp.outline.x2, wp.outline.y2 = wp:Clip(cx, cy);
+					end
+				end
+			end
+		end, nil);
+				
+		-- Post Signal --
+		wp:EmbedMethod("s", nil, function(cx, cy, x, y, w, h)
+			if Mode == "D" and Widget.IsSignaled(wp.N) then
+				-- If there is no move widget, set the pane as the widget on a press.
+				if not UserW_GetMoveWidget() then
+					if UI.GetPress() then
+						UserW_SetMoveWidget(wp);
+					end
+					
+				-- If there is a move widget, make the pane the move dock instead.
+				else
+					UserW_SetMoveDock(wp);
+				end
+			end
+		end);	
+	
+		-- Post Update --
+		wp:EmbedMethod("u", nil, function(x, y, w, h)
+			-- If the grid is on, draw it over the pane, using red if the cursor is over it.
+			local bChoice = wp.N == UI.GetChoice();
+			if wp:GetGridOn() then
+				local color = bChoice and 0 or 1;
+				Render.DrawGrid(x, y, w, h, 1, color, color, wp:GetGridCuts("xCuts"), wp:GetGridCuts("yCuts"));
+			end
+			
+			-- Highlight the pane if it is the choice.
+			if bChoice then
+				Render.DrawBox(x, y, w, h, 0, 1, 0);
+				
+			-- Highlight the pane if it is the move dock.
+			elseif wp == UserW_GetMoveDock() then
+				Render.DrawBox(x, y, w, h, 0, 1, 1);
+				
+			-- Highlight the pane if it is the current widget.
+			elseif wp == UserW_Current() then
+				Render.DrawBox(x, y, w, h, 0, 0, 1);
+			end
+			
+			-- If a widget is being formed over the pane, draw it and its outline.
+			if Mode == "F" and wp.outline then
+				local x, y, w, h = Rect(wp.outline.x1, wp.outline.y1, wp.outline.x2, wp.outline.y2);
+				UserW_Current():Update(x, y, w, h);
+				Render.DrawBox(x, y, w, h, 0, 0, 1);
+			end
+		end);
+	return wp;
+end
+
+--------------------------------
+-- UserW_Widget
+-- Builds a user widget
+-- component: Component type
+-- arg: Arguments to builder
+-- Returns: Widget property set
+--------------------------------
+function UserW_Widget (component, ...)
+	local wp = W_New(component, unpack(arg));
+		-- Event Filter --
+		wp:EmbedMethod("e", function(event)
+			return Mode == "N";
+		end, nil);		
+		
+		-- Post Signal --
+		wp:EmbedMethod("s", nil, function(cx, cy, x, y, w, h)
+			if Mode == "D" then
+				if not UserW_GetMoveWidget() and Widget.IsSignaled(wp.N) and UI.GetPress() then
+					UserW_SetMoveWidget(wp);
+				end
+			end
+		end);
+		
+		-- Post Update --
+		wp:EmbedMethod("u", nil, function(x, y, w, h)
+			-- Highlight the widget if it is the choice.
+			if wp.N == UI.GetChoice() then
+				Render.DrawBox(x, y, w, h, 0, 1, 0);
+				
+			-- Highlight this if it is the current widget.
+			elseif wp == UserW_Current() then
+				Render.DrawBox(x, y, w, h, 0, 0, 1);
+			end
+		end);
+	return wp;
+end
+
+-----------------------------------
+-- UserW_MovePane
+-- Builds the move pane
+-- Returns: Move pane property set
+-----------------------------------
+function UserW_MovePane ()
+	local wp = Popup();
+		-- Post Event --
+		wp:EmbedMethod("e", nil, function(event)
+			if event == Widget.WidgetDrop then
+				-- Snap the move widget to a position on the dock.
+				local x, y, w, h = wp:GetRect("xywh");
+				x, y = wp.dock:Snap(x, y, false);
+				
+				-- If the move widget is not contained within the dock, restored its old
+				-- dock, coordinates, and dimensions.
+				if not BoxInBox(x, y, w, h, wp.dock:GetRect("xywh")) then
+					Message("Widget will not fit on pane.", false);
+					wp.dock, x, y, w, h = W_PSet(wp.widget.op), wp.widget.ox, wp.widget.oy, wp.widget.ow, wp.widget.oh;
+				end
+				
+				-- Put the widget in the dock. Invalidate the move widget and move dock.
+				local move, dock = wp.widget, wp.dock;
+				wp.widget, wp.dock = nil, nil;
+				move:Dock(dock, "Global", x, y, w, h);
+			end
+		end);
+				
+		-- Signal Filter --
+		wp:EmbedMethod("s", function(cx, cy, x, y, w, h)
+			return wp.bOn;
+			
+		-- Post Signal --
+		end, function(cx, cy, x, y, w, h)
+			if Widget.IsSignaled(wp.N) then
+				Part.Signal(wp.banner);
+			end
+		end);
+		
+		-- Update Filter --
+		wp:EmbedMethod("u", function(x, y, w, h, vx, vy, vw, vh)
+			return wp.widget;
+			
+		-- Post Update --
+		end, function(x, y, w, h, vx, vy, vw, vh)
+			-- Draw the widget. If it is a pane, recurse on its widgets.
+			local function Draw (wp, x, y, w, h)
+				wp:Update(x, y, w, h);
+				if Widget.GetType(wp.N) ~= Widget.Composite then
+					return;
+				end
+				for paneitem in wp:Iter() do
+					local wx, wy, ww, wh = W_PSet(paneitem):GetLocalRect();
+					Draw(W_PSet(paneitem), x + wx * w, y + wy * h, ww * w, wh * h);
+				end
+			end
+			
+			-- Draw and frame the move widget.
+			Draw(wp.widget, x, y, w, h, 0, 0, 1, 1);
+			Render.DrawBox(x, y, w, h, 1, 0, 1);
+		end);
+	return wp;
+end
+
+-----------------------------------
+-- UserW_UserPane
+-- Builds the user pane
+-- Returns: User pane property set
+-----------------------------------
+function UserW_UserPane ()
+	return UserW_Pane("Backdrop", true);
+end

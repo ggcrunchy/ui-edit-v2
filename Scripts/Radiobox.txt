@@ -1,0 +1,192 @@
+----------------------------------
+-- Radiobox
+-- Radiobox setup procedure
+-- ow, oh: Option dimensions
+-- bFrame: Frame boolean
+-- Returns: Radiobox property set
+----------------------------------
+function Radiobox (ow, oh, bFrame)
+	local wp = W_New("Radiobox", ow, oh, bFrame);
+		wp:SetPicture("B", GetAsset("Picture", "clear"));
+		wp:SetPicture("C", GetAsset("Picture", "RO_c"));
+		wp:SetPicture("O", GetAsset("Picture", "RO_o"));
+	return wp;
+end
+
+-----------------------------------------------------
+-- Table with radiobox methods; inherits from widget
+-----------------------------------------------------
+W_Inherit("Radiobox", {
+	-----------------------------
+	-- Deletes the user radiobox
+	-- wp: Widget property set
+	-----------------------------
+	Delete = function(wp)
+	
+	end,
+
+	---------------------------------
+	-- Loads the radiobox dialog box
+	-- dp: Dialog property set
+	-- widgets: Stock widget table
+	---------------------------------
+	Dialog = function(dp, widgets)
+		----------------------------
+		-- Loading: radiobox dialog
+		----------------------------
+		dp:SetString("Radiobox Features");
+		dp.load = { x = .5, y = 0, w = .5, h = .5 };
+				
+		----------------------------
+		-- Loading: picture listbox
+		----------------------------
+		widgets.pics:Append("Backdrop", "B");
+		widgets.pics:Append("Choice", "C");
+		widgets.pics:Append("Option", "O");
+				
+		-----------
+		-- Docking
+		-----------
+		widgets.help:Dock(dp, "Body", .05, .05, .6, .1);
+		widgets.pics:Dock(dp, "Body", .05, .2, .6, .3);
+		widgets.set:Dock(dp, "Body", .7, .4, .25, .1);
+		local col = SpacedColumn(.05, .05, .6, .25, .1);
+			widgets.grid:Dock(dp, "Body", col());
+			widgets.tag:Dock(dp, "Body", col());
+	end,
+
+	-----------------------------
+	-- Generates a new radiobox
+	-- wp: Widget property set
+	-- ow, oh: Option dimensions
+	-- bFrame: Frame boolean
+	-----------------------------
+	New = function(wp, ow, oh, bFrame)
+		wp.array, wp.ow, wp.oh, wp.bFrame = {}, ow, oh, bFrame;
+
+		-- Event --
+		wp:SetMethod("e", function(event)
+			if event == Widget.RangeGrabItem then
+				wp.drop = Range.GetGrabbedItem(wp.N);
+			elseif event == Widget.RangeDropItem then
+				wp:SetChoice(wp.drop);
+			end
+		end);
+		
+		-- Signal --
+		wp:SetMethod("s", function(cx, cy, x, y, w, h)
+			if PointInBox(cx, cy, x, y, w, h) then
+				Widget.Signal(wp.N);
+				for index, option in wp:Iter() do
+					local ox, oy = x + (option.x - wp.ow / 2) * w, y + (option.y - wp.oh / 2) * h;
+					if PointInBox(cx, cy, ox, oy, wp.ow * w, wp.oh * h) then
+						Range.SignalItem(wp.N, index);
+					end
+				end
+			end
+		end);
+		
+		-- Update --
+		wp:SetMethod("u", function(x, y, w, h)
+			wp:DrawPicture("B", x, y, w, h);
+			
+			-- Iterate through the options. If the option is the choice, draw that;
+			-- otherwise, draw a normal option.
+			local choice = wp:GetChoice();
+			for index, option in wp:Iter() do
+				local ox, oy = x + (option.x - wp.ow / 2) * w, y + (option.y - wp.oh / 2) * h;
+				wp:DrawPicture(index == choice and "C" or "O", ox, oy, wp.ow * w, wp.oh * h);
+			end
+			
+			-- If requested, frame the radiobox.
+			if wp.bFrame then
+				Render.DrawBox(x, y, w, h, 1, 1, 1);
+			end
+		end);
+	end,
+	
+	-----------------------------------------------
+	-- Prints the radiobox data to a stream
+	-- wp: Widget property set
+	-- stream: Stream to which radiobox is printed
+	-- indent: Indent string
+	-----------------------------------------------
+	Print = function(wp, stream, indent)
+		local indent = indent or "";
+		stream:write('W_Load("Radiobox", {\n');
+		
+	--	wp:PrintPictures(stream, indent, "B");
+	
+		stream:write(indent, "});\n");
+	end,
+
+	----------------------------------
+	-- Generates a new user radiobox
+	-- Returns: Radiobox property set
+	----------------------------------
+	UserNew = function()
+		return UserW_Widget("Radiobox", .2, .2, false);
+	end,
+	
+	--------------------------------------
+	-- Adds an option to a basic radiobox
+	-- wp: Widget property set
+	-- x, y: Option position
+	--------------------------------------
+	AddOption = function(wp, x, y)
+		local itemcount = Range.GetItemCount(wp.N);
+		Range.InsertItems(wp.N, itemcount, 1);
+		table.insert(wp.array, { x = x, y = y });
+		
+		-- If this is the first option, invoke a refresh.
+		if itemcount == 0 then
+			wp:Call("onRefresh", true);
+		end
+	end,
+
+	----------------------------
+	-- Gets the radiobox choice
+	-- wp: Widget property set
+	-- Returns: Radiobox choice
+	----------------------------
+	GetChoice = function(wp)
+		return wp.choice or 0;
+	end,
+	
+	-------------------------------------------------------------
+	-- Builds an iterator over the radiobox
+	-- wp: Widget property set
+	-- start: Start index; if nil, start at 0
+	-- count: Range count; if nil, use item count
+	-- Returns: Iterator which returns index and option position
+	-------------------------------------------------------------
+	Iter = function(wp, start, count)
+		local itemcount = Range.GetItemCount(wp.N);
+		start, count = start or 0, count or itemcount;
+		local final = start + count;
+		if final > itemcount then
+			final = itemcount;
+		end
+		return function(_, index)
+			if index + 1 < final then
+				return index + 1, wp.array[index + 2];
+			end
+		end, nil, start - 1;
+	end,
+
+	---------------------------------------------------
+	-- Sets the radiobox choice
+	-- wp: Widget property set
+	-- choice: Choice to assign
+	-- bForceRefresh: If true, refresh unconditionally
+	---------------------------------------------------
+	SetChoice = function(wp, choice, bForceRefresh)
+		if choice ~= wp:GetChoice() or bForceRefresh then
+			wp:RefreshAction(function()
+				wp.choice = choice;
+			end);
+		end
+	end,
+
+	_Type = "Range"
+}, "Widget");
